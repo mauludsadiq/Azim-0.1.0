@@ -15,6 +15,9 @@ Azim combines:
 - FiLM-conditioned tower execution
 - semantic authority validation
 - deterministic loss computation
+- deterministic optimizer updates
+- deterministic checkpoint state
+- checkpointed training replay
 
 The system is not probabilistic infrastructure wrapped in unverifiable sampling.
 
@@ -34,6 +37,9 @@ Tokenizer
 → Lawful Inference
 → Validator
 → Deterministic Loss
+→ Deterministic Optimizer
+→ Deterministic Checkpoints
+→ Checkpoint Replay
 
 Every stage emits SHA-256 receipts.
 
@@ -181,6 +187,28 @@ Implemented:
 
 ---
 
+# Deterministic Optimizer
+
+Implemented:
+
+- SGD update rule
+- deterministic optimizer receipts
+- deterministic parameter updates
+
+---
+
+# Deterministic Checkpoints
+
+Implemented:
+
+- persistent checkpoint state
+- checkpoint digests
+- append-only checkpoint evolution
+- checkpoint chain heads
+- deterministic checkpoint replay
+
+---
+
 # Determinism Guarantees
 
 Azim currently guarantees:
@@ -192,6 +220,8 @@ Azim currently guarantees:
 - deterministic realization
 - deterministic validation
 - deterministic loss evaluation
+- deterministic optimizer evolution
+- deterministic checkpoint replay
 
 All receipts are SHA-256 content-addressed outputs.
 
@@ -215,11 +245,14 @@ All receipts are SHA-256 content-addressed outputs.
 - lawful inference
 - validator scaffold
 - deterministic loss
+- deterministic optimizer
+- deterministic checkpoints
+- checkpoint replay
 
 ## Not Yet Implemented
 
 - training loop
-- optimizer
+- true gradient propagation
 - gradient oracle
 - RSSM
 - associative scan
@@ -235,7 +268,7 @@ All receipts are SHA-256 content-addressed outputs.
 
 Current suite status:
 
-95 passed
+119 passed
 0 failed
 
 ---
@@ -263,14 +296,14 @@ Every stage is receipt-verifiable.
 
 Next development targets:
 
-- deterministic optimizer substrate
-- parameter update receipts
-- training replay
 - persistent module graph
+- trainable parameter registry
+- true gradient propagation
 - gradient oracle scaffold
-- deterministic checkpoints
+- checkpoint serialization
 - corpus ingestion
 - replay verification
+- distributed checkpoint evolution
 
 The next transition is:
 
