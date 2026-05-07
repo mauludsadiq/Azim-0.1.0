@@ -1,0 +1,34 @@
+import("std/json") as json
+import("std/hash") as hash
+import("inference") as infer
+import("surface") as surface
+import("realization") as real
+
+fn lawful_infer(claim) {
+  let inferred = infer.infer_with_receipt(claim) in
+  let surfaced = surface.generate_surface_with_receipt(inferred.chain.input_text) in
+  {
+    inference: inferred.chain,
+    inference_receipt: inferred.receipt,
+    surface: surfaced.output,
+    surface_receipt: surfaced.receipt,
+    realization_sha256: real.realization_sha256,
+    final_verdict: inferred.chain.final_verdict
+  }
+}
+
+fn lawful_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.lawful_inference",
+    version: "1.6.0",
+    output: output
+  }))
+}
+
+fn lawful_infer_with_receipt(claim) {
+  let output = lawful_infer(claim) in
+  let receipt = lawful_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export { lawful_infer, lawful_receipt, lawful_infer_with_receipt }

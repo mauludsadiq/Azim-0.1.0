@@ -1,0 +1,27 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/lawful_inference") as law
+
+test "lawful inference returns record" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  type.of(law.lawful_infer(claim)) == "record"
+}
+
+test "lawful inference preserves final verdict" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let out = law.lawful_infer(claim) in
+  out.final_verdict == "accepted"
+}
+
+test "lawful inference includes surface record" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let out = law.lawful_infer(claim) in
+  type.of(out.surface) == "record"
+}
+
+test "lawful inference receipt deterministic" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let a = law.lawful_infer_with_receipt(claim) in
+  let b = law.lawful_infer_with_receipt(claim) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
