@@ -1,0 +1,58 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/checkpoint") as ckpt
+import("../packages/azim_trial/checkpoint_replay") as replay
+
+test "run one advances checkpoint step" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let e = { text: "sky is blue", label: "accepted" } in
+  let out = replay.run_one(c, e, 0.01) in
+  out.checkpoint.step == 1
+}
+
+test "checkpoint replay returns record" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let examples = [
+    { text: "sky is blue", label: "accepted" },
+    { text: "sky is green", label: "rejected" }
+  ] in
+  type.of(replay.replay(examples, c, 0.01)) == "record"
+}
+
+test "checkpoint replay records event count" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let examples = [
+    { text: "sky is blue", label: "accepted" },
+    { text: "sky is green", label: "rejected" }
+  ] in
+  let out = replay.replay(examples, c, 0.01) in
+  list.len(out.events) == 2
+}
+
+test "checkpoint replay final step equals examples length" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let examples = [
+    { text: "sky is blue", label: "accepted" },
+    { text: "sky is green", label: "rejected" }
+  ] in
+  let out = replay.replay(examples, c, 0.01) in
+  out.checkpoint.step == 2
+}
+
+test "checkpoint replay receipt deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let examples = [
+    { text: "sky is blue", label: "accepted" },
+    { text: "sky is green", label: "rejected" }
+  ] in
+  let a = replay.replay_with_receipt(examples, c, 0.01) in
+  let b = replay.replay_with_receipt(examples, c, 0.01) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
