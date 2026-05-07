@@ -1,0 +1,33 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/inference") as infer
+
+test "inference chain returns record" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  type.of(infer.inference_chain(claim)) == "record"
+}
+
+test "inference final verdict accepted" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let out = infer.infer_with_receipt(claim) in
+  out.chain.final_verdict == "accepted"
+}
+
+test "inference final verdict rejected" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "green" } in
+  let out = infer.infer_with_receipt(claim) in
+  out.chain.final_verdict == "rejected"
+}
+
+test "inference final verdict needs evidence" {
+  let claim = { predicate: "has-color", subject: "moon", property: "color", value: "blue" } in
+  let out = infer.infer_with_receipt(claim) in
+  out.chain.final_verdict == "needs-evidence"
+}
+
+test "inference receipt deterministic" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let a = infer.infer_with_receipt(claim) in
+  let b = infer.infer_with_receipt(claim) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

@@ -1,0 +1,59 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tokenizer") as tok
+import("embedding") as emb
+import("attention") as attn
+import("block") as block
+import("logits") as logits
+import("generation") as gen
+import("semantic") as sem
+import("weights") as weights
+
+fn claim_to_text(claim) {
+  json.canonicalize(claim)
+}
+
+fn inference_chain(claim) {
+  let text = claim_to_text(claim) in
+  let token_step = tok.tokenize_with_receipt(text) in
+  let embedding_step = emb.embed_text_with_receipt(text) in
+  let attention_step = attn.attend_with_receipt(embedding_step.vectors) in
+  let block_step = block.block_with_receipt(embedding_step.vectors) in
+  let logits_step = logits.logits_with_receipt(text) in
+  let generation_step = gen.generate_with_receipt(text) in
+  let semantic_step = sem.evaluate_claim_with_receipt(claim) in
+  {
+    input_claim: claim,
+    input_text: text,
+    tokenizer: token_step,
+    embedding_receipt: embedding_step.receipt,
+    attention_receipt: attention_step.receipt,
+    block_receipt: block_step.receipt,
+    logits_receipt: logits_step.receipt,
+    generation: generation_step.output,
+    generation_receipt: generation_step.receipt,
+    semantic: semantic_step.evaluation,
+    semantic_receipt: semantic_step.receipt,
+    final_verdict: semantic_step.evaluation.verdict
+  }
+}
+
+fn chain_receipt(chain) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.inference",
+    version: "1.0.0",
+    tokenizer_vocab_sha256: tok.vocab_sha256,
+    weights_sha256: weights.weights_sha256,
+    world_sha256: sem.world_sha256,
+    chain: chain
+  }))
+}
+
+fn infer_with_receipt(claim) {
+  let chain = inference_chain(claim) in
+  let receipt = chain_receipt(chain) in
+  { chain: chain, receipt: receipt }
+}
+
+export { claim_to_text, inference_chain, chain_receipt, infer_with_receipt }
