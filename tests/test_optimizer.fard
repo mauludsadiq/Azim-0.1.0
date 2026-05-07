@@ -1,0 +1,33 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/optimizer") as opt
+
+test "sgd returns tensor record" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let g = tensor.vector([0.1, 0.1, 0.1]) in
+  type.of(opt.sgd(w, g, 0.01)) == "record"
+}
+
+test "sgd preserves length" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let g = tensor.vector([0.1, 0.1, 0.1]) in
+  let out = opt.sgd(w, g, 0.01) in
+  list.len(out.data) == list.len(w.data)
+}
+
+test "optimizer step records before and after" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let g = tensor.vector([0.1, 0.1, 0.1]) in
+  let step = opt.optimizer_step(w, g, 0.01) in
+  (step.before == w) && (type.of(step.after) == "record")
+}
+
+test "optimizer receipt deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let g = tensor.vector([0.1, 0.1, 0.1]) in
+  let a = opt.optimizer_step_with_receipt(w, g, 0.01) in
+  let b = opt.optimizer_step_with_receipt(w, g, 0.01) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

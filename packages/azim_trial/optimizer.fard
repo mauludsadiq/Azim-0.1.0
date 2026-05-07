@@ -1,0 +1,34 @@
+import("std/json") as json
+import("std/hash") as hash
+import("tensor") as tensor
+
+fn sgd(weight_tensor, grad_tensor, lr) {
+  let scaled = tensor.scale(grad_tensor, lr) in
+  tensor.sub(weight_tensor, scaled)
+}
+
+fn optimizer_step(weight_tensor, grad_tensor, lr) {
+  let updated = sgd(weight_tensor, grad_tensor, lr) in
+  {
+    before: weight_tensor,
+    gradient: grad_tensor,
+    learning_rate: lr,
+    after: updated
+  }
+}
+
+fn optimizer_receipt(step) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.optimizer",
+    version: "1.9.0",
+    step: step
+  }))
+}
+
+fn optimizer_step_with_receipt(weight_tensor, grad_tensor, lr) {
+  let step = optimizer_step(weight_tensor, grad_tensor, lr) in
+  let receipt = optimizer_receipt(step) in
+  { step: step, receipt: receipt }
+}
+
+export { sgd, optimizer_step, optimizer_receipt, optimizer_step_with_receipt }
