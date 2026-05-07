@@ -1,0 +1,47 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/realization") as real
+
+test "realization map hash has sha256 prefix" {
+  str.starts_with(real.realization_sha256, "sha256:")
+}
+
+test "legal pair realizes surface" {
+  real.realize("sky", "noun_plural") == "skies"
+}
+
+test "illegal pair falls back to identity" {
+  real.realize("sky", "adjective") == "sky"
+}
+
+test "unknown lemma falls back to lemma id" {
+  real.realize("moon", "noun_singular") == "moon"
+}
+
+test "legal pair detection true" {
+  real.legal_pair("blue", "adjective") == true
+}
+
+test "legal pair detection false" {
+  real.legal_pair("blue", "noun_plural") == false
+}
+
+test "realize sequence returns same length" {
+  let pairs = [
+    { lemma_id: "sky", class_id: "noun_singular" },
+    { lemma_id: "blue", class_id: "adjective" }
+  ] in
+  let out = real.realize_sequence(pairs) in
+  list.len(out) == list.len(pairs)
+}
+
+test "realization receipt deterministic" {
+  let pairs = [
+    { lemma_id: "sky", class_id: "noun_singular" },
+    { lemma_id: "blue", class_id: "adjective" }
+  ] in
+  let a = real.realize_with_receipt(pairs) in
+  let b = real.realize_with_receipt(pairs) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

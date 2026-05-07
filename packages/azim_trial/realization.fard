@@ -1,0 +1,83 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/rec") as rec
+import("std/list") as list
+
+let realization_map = {
+  sky: {
+    noun_singular: "sky",
+    noun_plural: "skies",
+    identity: "sky"
+  },
+  grass: {
+    noun_singular: "grass",
+    noun_plural: "grasses",
+    identity: "grass"
+  },
+  fire: {
+    noun_singular: "fire",
+    noun_plural: "fires",
+    identity: "fire"
+  },
+  water: {
+    noun_singular: "water",
+    noun_plural: "waters",
+    identity: "water"
+  },
+  blue: {
+    adjective: "blue",
+    identity: "blue"
+  },
+  green: {
+    adjective: "green",
+    identity: "green"
+  }
+}
+
+let realization_sha256 = hash.sha256_text(json.canonicalize(realization_map))
+
+fn lemma_record(lemma_id) {
+  rec.get(realization_map, lemma_id)
+}
+
+fn realize(lemma_id, class_id) {
+  let forms = lemma_record(lemma_id) in
+  if forms == null then lemma_id else
+  rec.getOr(forms, class_id, rec.getOr(forms, "identity", lemma_id))
+}
+
+fn legal_pair(lemma_id, class_id) {
+  let forms = lemma_record(lemma_id) in
+  if forms == null then false else rec.has(forms, class_id)
+}
+
+fn realize_pair(pair) {
+  {
+    lemma_id: pair.lemma_id,
+    class_id: pair.class_id,
+    surface: realize(pair.lemma_id, pair.class_id),
+    legal: legal_pair(pair.lemma_id, pair.class_id)
+  }
+}
+
+fn realize_sequence(pairs) {
+  list.map(pairs, fn(pair) { realize_pair(pair) })
+}
+
+fn realization_receipt(input, output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.realization",
+    version: "1.4.0",
+    realization_sha256: realization_sha256,
+    input: input,
+    output: output
+  }))
+}
+
+fn realize_with_receipt(pairs) {
+  let output = realize_sequence(pairs) in
+  let receipt = realization_receipt(pairs, output) in
+  { output: output, receipt: receipt }
+}
+
+export { realization_map, realization_sha256, lemma_record, realize, legal_pair, realize_pair, realize_sequence, realization_receipt, realize_with_receipt }
