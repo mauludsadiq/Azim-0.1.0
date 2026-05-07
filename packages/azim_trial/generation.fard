@@ -1,0 +1,37 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("weights") as weights
+import("logits") as logits
+
+fn argmax_label(logit_tensor) {
+  let idx = tensor.argmax(logit_tensor.data) in
+  {
+    index: idx,
+    label: list.get(weights.label_tokens, idx),
+    value: list.get(logit_tensor.data, idx)
+  }
+}
+
+fn generate_label(text) {
+  argmax_label(logits.logits_for_text(text))
+}
+
+fn generation_receipt(input_text, output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.generation",
+    version: "0.7.0",
+    weights_sha256: weights.weights_sha256,
+    input_text: input_text,
+    output: output
+  }))
+}
+
+fn generate_with_receipt(text) {
+  let output = generate_label(text) in
+  let receipt = generation_receipt(text, output) in
+  { output: output, receipt: receipt }
+}
+
+export { argmax_label, generate_label, generation_receipt, generate_with_receipt }

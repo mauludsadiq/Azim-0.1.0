@@ -1,0 +1,27 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/generation") as gen
+import("../packages/azim_trial/logits") as logits
+import("../packages/azim_trial/weights") as weights
+
+test "argmax label returns record" {
+  let out = gen.argmax_label(logits.logits_for_text("sky is blue")) in
+  type.of(out) == "record"
+}
+
+test "argmax label index in range" {
+  let out = gen.argmax_label(logits.logits_for_text("sky is blue")) in
+  (out.index >= 0) && (out.index < list.len(weights.label_tokens))
+}
+
+test "generate label returns known label" {
+  let out = gen.generate_label("sky is blue") in
+  list.get(weights.label_tokens, out.index) == out.label
+}
+
+test "generation receipt deterministic" {
+  let a = gen.generate_with_receipt("sky is blue") in
+  let b = gen.generate_with_receipt("sky is blue") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
