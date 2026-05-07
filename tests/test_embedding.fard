@@ -1,0 +1,27 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/embedding") as emb
+import("../packages/azim_trial/tokenizer") as tok
+
+test "embed id returns tensor record" {
+  type.of(emb.embed_id(tok.bos_id)) == "record"
+}
+
+test "embed text length matches token length" {
+  let ids = tok.tokenize("sky") in
+  let vectors = emb.embed_text("sky") in
+  list.len(vectors) == list.len(ids)
+}
+
+test "unembed vector emits three logits" {
+  let v = emb.embed_id(tok.bos_id) in
+  let logits = emb.unembed_vector(v) in
+  list.len(logits.data) == 3
+}
+
+test "embedding receipt deterministic" {
+  let a = emb.embed_text_with_receipt("sky") in
+  let b = emb.embed_text_with_receipt("sky") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

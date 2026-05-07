@@ -1,0 +1,45 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("tokenizer") as tok
+import("weights") as weights
+
+fn embed_id(token_id) {
+  weights.embedding_row(token_id)
+}
+
+fn embed_ids(ids) {
+  list.map(ids, fn(id) { embed_id(id) })
+}
+
+fn embed_text(text) {
+  embed_ids(tok.tokenize(text))
+}
+
+fn unembed_vector(v) {
+  tensor.matvec(weights.W_U, v)
+}
+
+fn logits_for_id(token_id) {
+  unembed_vector(embed_id(token_id))
+}
+
+fn embedding_receipt(input, output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.embedding",
+    version: "0.3.0",
+    tokenizer_vocab_sha256: tok.vocab_sha256,
+    weights_sha256: weights.weights_sha256,
+    input: input,
+    output: output
+  }))
+}
+
+fn embed_text_with_receipt(text) {
+  let vectors = embed_text(text) in
+  let receipt = embedding_receipt(text, vectors) in
+  { vectors: vectors, receipt: receipt }
+}
+
+export { embed_id, embed_ids, embed_text, unembed_vector, logits_for_id, embedding_receipt, embed_text_with_receipt }
