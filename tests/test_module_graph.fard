@@ -1,0 +1,48 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/module_graph") as mg
+
+test "node returns record" {
+  let n = mg.node("n0", "loss", ["input"], ["output"], ["sha256:r0"], ["p0"]) in
+  type.of(n) == "record"
+}
+
+test "node digest deterministic" {
+  let n = mg.node("n0", "loss", ["input"], ["output"], ["sha256:r0"], ["p0"]) in
+  let a = mg.node_digest(n) in
+  let b = mg.node_digest(n) in
+  (a == b) && str.starts_with(a, "sha256:")
+}
+
+test "graph returns record" {
+  let n = mg.node("n0", "loss", ["input"], ["output"], ["sha256:r0"], ["p0"]) in
+  type.of(mg.graph([n])) == "record"
+}
+
+test "append node increases count" {
+  let n0 = mg.node("n0", "loss", ["input"], ["output"], ["sha256:r0"], ["p0"]) in
+  let n1 = mg.node("n1", "optimizer", ["p0"], ["p1"], ["sha256:r1"], ["p0"]) in
+  let g = mg.graph([n0]) in
+  let g2 = mg.append_node(g, n1) in
+  list.len(g2.nodes) == 2
+}
+
+test "node receipts ok" {
+  let n = mg.node("n0", "loss", ["input"], ["output"], ["sha256:r0"], ["p0"]) in
+  mg.node_receipts_ok(n) == true
+}
+
+test "graph receipts ok" {
+  let n = mg.node("n0", "loss", ["input"], ["output"], ["sha256:r0"], ["p0"]) in
+  let g = mg.graph([n]) in
+  mg.graph_receipts_ok(g) == true
+}
+
+test "graph digest deterministic" {
+  let n = mg.node("n0", "loss", ["input"], ["output"], ["sha256:r0"], ["p0"]) in
+  let g = mg.graph([n]) in
+  let a = mg.graph_digest(g) in
+  let b = mg.graph_digest(g) in
+  (a == b) && str.starts_with(a, "sha256:")
+}

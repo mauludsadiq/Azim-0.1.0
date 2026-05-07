@@ -1,0 +1,66 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+
+fn node(id, kind, inputs, outputs, receipts, parameter_ids) {
+  {
+    id: id,
+    kind: kind,
+    inputs: inputs,
+    outputs: outputs,
+    receipts: receipts,
+    parameter_ids: parameter_ids
+  }
+}
+
+fn node_digest(n) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.module_graph.node",
+    version: "2.5.0",
+    node: n
+  }))
+}
+
+fn graph(nodes) {
+  {
+    version: "2.5.0",
+    nodes: nodes
+  }
+}
+
+fn graph_digest(g) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.module_graph",
+    version: "2.5.0",
+    graph: g
+  }))
+}
+
+fn append_node(g, n) {
+  {
+    version: g.version,
+    nodes: list.append(g.nodes, n)
+  }
+}
+
+fn find_node(nodes, id) {
+  list.find(nodes, fn(n) { n.id == id })
+}
+
+fn node_receipts_ok(n) {
+  list.all(n.receipts, fn(r) { str.starts_with(r, "sha256:") })
+}
+
+fn graph_receipts_ok(g) {
+  list.all(g.nodes, fn(n) { node_receipts_ok(n) })
+}
+
+fn graph_with_digest(g) {
+  {
+    graph: g,
+    digest: graph_digest(g)
+  }
+}
+
+export { node, node_digest, graph, graph_digest, append_node, find_node, node_receipts_ok, graph_receipts_ok, graph_with_digest }
