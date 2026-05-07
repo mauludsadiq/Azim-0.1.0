@@ -1,0 +1,62 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("lawful_inference") as law
+import("tower_film") as tf
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn all_realized_legal(items) {
+  list.all(items, fn(item) { item.legal == true })
+}
+
+fn validate_lawful_output(output) {
+  {
+    final_verdict: output.final_verdict,
+    inference_receipt_ok: receipt_ok(output.inference_receipt),
+    surface_receipt_ok: receipt_ok(output.surface_receipt),
+    realization_receipt_ok: receipt_ok(output.realization_sha256),
+    lawful_surface: all_realized_legal(output.surface.realized)
+  }
+}
+
+fn validate_tower(text) {
+  let out = tf.tower_with_film_receipt(text) in
+  {
+    receipt_ok: receipt_ok(out.receipt),
+    layer_count_ok: list.len(out.tower.layers) == 7,
+    first_layer_ok: list.get(out.tower.layers, 0).name == "L0.phoneme",
+    final_layer_ok: list.get(out.tower.layers, 6).name == "L6.discourse"
+  }
+}
+
+fn validate_claim(claim) {
+  let lawful = law.lawful_infer_with_receipt(claim) in
+  let tower_check = validate_tower(lawful.output.inference.input_text) in
+  let lawful_check = validate_lawful_output(lawful.output) in
+  {
+    lawful_receipt_ok: receipt_ok(lawful.receipt),
+    tower: tower_check,
+    lawful: lawful_check,
+    final_verdict: lawful.output.final_verdict
+  }
+}
+
+fn validator_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.validator",
+    version: "1.7.0",
+    report: report
+  }))
+}
+
+fn validate_claim_with_receipt(claim) {
+  let report = validate_claim(claim) in
+  let receipt = validator_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export { receipt_ok, all_realized_legal, validate_lawful_output, validate_tower, validate_claim, validator_receipt, validate_claim_with_receipt }

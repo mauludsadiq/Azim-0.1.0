@@ -1,0 +1,37 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/validator") as val
+
+test "receipt ok accepts sha256 prefix" {
+  val.receipt_ok("sha256:abc") == true
+}
+
+test "validator claim returns record" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  type.of(val.validate_claim(claim)) == "record"
+}
+
+test "validator preserves accepted verdict" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let report = val.validate_claim(claim) in
+  report.final_verdict == "accepted"
+}
+
+test "validator checks tower layer count" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let report = val.validate_claim(claim) in
+  report.tower.layer_count_ok == true
+}
+
+test "validator checks lawful surface" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let report = val.validate_claim(claim) in
+  report.lawful.lawful_surface == true
+}
+
+test "validator receipt deterministic" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let a = val.validate_claim_with_receipt(claim) in
+  let b = val.validate_claim_with_receipt(claim) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
