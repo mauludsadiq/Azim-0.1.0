@@ -1,0 +1,31 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tower") as tower
+
+test "tower returns record" {
+  type.of(tower.tower("sky is blue")) == "record"
+}
+
+test "tower has seven layers" {
+  let out = tower.tower("sky is blue") in
+  list.len(out.layers) == 7
+}
+
+test "tower first layer is phoneme" {
+  let out = tower.tower("sky is blue") in
+  let l0 = list.get(out.layers, 0) in
+  l0.name == "L0.phoneme"
+}
+
+test "tower final layer is discourse" {
+  let out = tower.tower("sky is blue") in
+  let l6 = list.get(out.layers, 6) in
+  l6.name == "L6.discourse"
+}
+
+test "tower receipt deterministic" {
+  let a = tower.tower_with_receipt("sky is blue") in
+  let b = tower.tower_with_receipt("sky is blue") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

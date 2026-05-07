@@ -1,0 +1,49 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("embedding") as emb
+import("block") as block
+
+fn layer(name, input_vectors) {
+  let output = block.block(input_vectors) in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.tower.layer",
+    version: "1.1.0",
+    layer: name,
+    input: input_vectors,
+    output: output
+  })) in
+  { name: name, output: output, receipt: receipt }
+}
+
+fn tower(text) {
+  let vectors = emb.embed_text(text) in
+  let l0 = layer("L0.phoneme", vectors) in
+  let l1 = layer("L1.morpheme", [l0.output]) in
+  let l2 = layer("L2.lemma", [l1.output]) in
+  let l3 = layer("L3.word", [l2.output]) in
+  let l4 = layer("L4.phrase", [l3.output]) in
+  let l5 = layer("L5.clause", [l4.output]) in
+  let l6 = layer("L6.discourse", [l5.output]) in
+  {
+    input_text: text,
+    layers: [l0, l1, l2, l3, l4, l5, l6],
+    output: l6.output
+  }
+}
+
+fn tower_receipt(tower_output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.tower",
+    version: "1.1.0",
+    output: tower_output
+  }))
+}
+
+fn tower_with_receipt(text) {
+  let out = tower(text) in
+  let receipt = tower_receipt(out) in
+  { tower: out, receipt: receipt }
+}
+
+export { layer, tower, tower_receipt, tower_with_receipt }
