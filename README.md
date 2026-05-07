@@ -1,85 +1,279 @@
-# Azim Trial
+# Azim v1.8.0
 
-Azim Trial is a deterministic tiny model package written in FARD. It combines:
+Azim is a deterministic receipt-verified neural inference stack written in FARD.
 
-1. deterministic longest-match tokenization,
-2. pure row-major tensor operations,
-3. fixed arithmetic weights,
-4. a single-block decoder-style neural pass,
-5. explicit semantic/world-state verification,
-6. canonical JSON SHA-256 receipts.
+Every stage of execution emits cryptographic receipts.
+Every linguistic transformation is structurally auditable.
+Every inference path is deterministic.
 
-The package is not a chatbot. It is a receipt-verifiable claim classifier and proof-object generator.
+Azim combines:
 
-## Package layout
+- deterministic tensor execution
+- receipt-chained neural inference
+- explicit linguistic tower structure
+- lawful symbolic realization
+- FiLM-conditioned tower execution
+- semantic authority validation
+- deterministic loss computation
 
-```text
-packages/azim_trial/tokenizer.fard   Deterministic tokenizer and tokenizer receipts
-packages/azim_trial/tensor.fard      Pure FARD vector/matrix operations
-packages/azim_trial/weights.fard     Fixed deterministic model weights
-packages/azim_trial/semantic.fard    Explicit world-state predicate evaluator
-packages/azim_trial/model.fard       Tiny neural pass + semantic verdict integration
-packages/azim_trial/receipts.fard    Package manifest and receipt chaining
-tests/*.fard                         Unit tests
-examples/*.fard                      Runnable examples
-main.fard                            Default run target
-```
+The system is not probabilistic infrastructure wrapped in unverifiable sampling.
 
-## Determinism rules
+It is an auditable computation graph.
 
-- No runtime randomness.
-- No dropout.
-- No async or parallel map.
-- No hash-dependent map iteration.
-- Records are canonicalized before hashing.
-- All receipts use `json.canonicalize` and `hash.sha256_text`.
-- Ties in `argmax` choose the lowest index.
+---
 
-## Run
+# Current Architecture
 
-```bash
-fardrun run --program main.fard --out out/azim_trial
-```
+Tokenizer
+→ Embedding
+→ Attention
+→ Transformer Block
+→ Logits
+→ Argmax Generation
+→ Surface Realization
+→ Lawful Inference
+→ Validator
+→ Deterministic Loss
 
-## Test
+Every stage emits SHA-256 receipts.
 
-```bash
-fardrun test --program tests/test_tokenizer.fard
-fardrun test --program tests/test_tensor.fard
-fardrun test --program tests/test_semantic.fard
-fardrun test --program tests/test_model.fard
-```
+---
 
-Or:
+# Current Components
 
-```bash
-for f in tests/test_*.fard; do fardrun test --program "$f"; done
-```
+## v0.1 — Tokenizer
 
-## Example claims
+Implemented:
 
-Accepted:
+- BOS/EOS handling
+- longest-match tokenization
+- receipt verification
+- vocabulary hashing
 
-```fard
-{ predicate: "has-color", subject: "sky", property: "color", value: "blue" }
-```
+## v0.2 — Tensor Runtime
 
-Rejected:
+Implemented:
 
-```fard
-{ predicate: "has-color", subject: "sky", property: "color", value: "green" }
-```
+- dot product
+- matvec
+- softmax
+- argmax
+- vector algebra
+- RMS norm
+- SiLU
 
-Needs evidence:
+## v0.3 — Embedding Path
 
-```fard
-{ predicate: "has-color", subject: "moon", property: "color", value: "blue" }
-```
+Implemented:
 
-## Model boundary
+- token embeddings
+- text embeddings
+- unembedding logits
+- embedding receipts
 
-The neural pass is deterministic and traced, but the semantic/world-state evaluator is authoritative for the final verdict in v0.1. This prevents the tiny untrained model from hallucinating truth. The neural pass proves the mechanical transformer path exists; the semantic model proves the claim decision.
+## v0.4 — Attention
 
-## Version
+Implemented:
 
-Azim Trial v0.1.0 for FARD v1.7.x.
+- Q/K/V projection
+- attention scoring
+- deterministic attention receipts
+
+## v0.5 — Transformer Block
+
+Implemented:
+
+- RMS normalization
+- feed-forward network
+- residual structure
+- transformer receipts
+
+## v0.6 — Logits
+
+Implemented:
+
+- hidden-state extraction
+- deterministic logits
+- logits receipts
+
+## v0.7 — Generation
+
+Implemented:
+
+- argmax label generation
+- deterministic generation receipts
+
+## v1.0 — Receipt-Verified Inference
+
+Implemented:
+
+- end-to-end inference chain
+- semantic authority integration
+- receipt chaining across inference path
+
+---
+
+# Aware-Tower Scaffold
+
+Implemented:
+
+- L0 phoneme
+- L1 morpheme
+- L2 lemma
+- L3 word
+- L4 phrase
+- L5 clause
+- L6 discourse
+
+---
+
+# FiLM Conditioning
+
+Implemented:
+
+- deterministic FiLM modulation
+- top-down modulation scaffold
+
+---
+
+# Morphological Realization Algebra
+
+Implemented:
+
+- lemma/class realization
+- legality verification
+- identity fallback
+- lawful surface generation
+
+---
+
+# Lawful Inference
+
+Implemented:
+
+- receipt-verified lawful inference
+- lawful surface integration
+- realization receipts
+- semantic receipts
+- inference receipts
+
+---
+
+# Validator Scaffold
+
+Implemented:
+
+- tower validation
+- lawful surface validation
+- receipt validation
+- linguistic legality checks
+
+---
+
+# Deterministic Loss
+
+Implemented:
+
+- label-index mapping
+- logsumexp
+- negative log likelihood
+- deterministic loss receipts
+
+---
+
+# Determinism Guarantees
+
+Azim currently guarantees:
+
+- deterministic execution
+- deterministic receipts
+- deterministic inference
+- deterministic logits
+- deterministic realization
+- deterministic validation
+- deterministic loss evaluation
+
+All receipts are SHA-256 content-addressed outputs.
+
+---
+
+# Current Status
+
+## Fully Implemented
+
+- tokenizer
+- tensor runtime
+- embeddings
+- attention
+- transformer block
+- logits
+- argmax generation
+- inference chain
+- tower scaffold
+- FiLM scaffold
+- realization algebra
+- lawful inference
+- validator scaffold
+- deterministic loss
+
+## Not Yet Implemented
+
+- training loop
+- optimizer
+- gradient oracle
+- RSSM
+- associative scan
+- distributed execution
+- dual receipts
+- state pack CDN
+- asynchronous validator
+- OpenWebText training
+
+---
+
+# Test Status
+
+Current suite status:
+
+95 passed
+0 failed
+
+---
+
+# Design Principle
+
+Azim treats language generation as a lawful computational process.
+
+The model is not allowed to emit arbitrary symbolic forms.
+
+Surface realization is constrained by explicit legality mappings:
+
+(Lemma_ID, Class_ID)
+→ lawful surface form
+
+Illegal realizations fall back deterministically.
+
+Every inference path is auditable.
+
+Every stage is receipt-verifiable.
+
+---
+
+# Next Phase
+
+Next development targets:
+
+- deterministic optimizer substrate
+- parameter update receipts
+- training replay
+- persistent module graph
+- gradient oracle scaffold
+- deterministic checkpoints
+- corpus ingestion
+- replay verification
+
+The next transition is:
+
+deterministic inference
+→
+deterministic training
