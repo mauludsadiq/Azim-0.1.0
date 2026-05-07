@@ -1,0 +1,63 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/parameter_registry") as preg
+
+test "parameter returns record" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(preg.parameter("p0", t, true, "test")) == "record"
+}
+
+test "parameter records shape" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  p.shape == t.dims
+}
+
+test "parameter digest deterministic" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let a = preg.parameter_digest(p) in
+  let b = preg.parameter_digest(p) in
+  (a == b) && str.starts_with(a, "sha256:")
+}
+
+test "registry returns record" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  type.of(preg.registry([p])) == "record"
+}
+
+test "get param returns matching parameter" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  preg.get_param(reg, "p0").id == "p0"
+}
+
+test "missing param returns null" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  preg.get_param(reg, "missing") == null
+}
+
+test "update param appends lineage" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let u = tensor.vector([2.0, 3.0, 4.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let next = preg.update_param(reg, "p0", u, "sha256:update1") in
+  let out = preg.get_param(next, "p0") in
+  list.len(out.lineage) == 1
+}
+
+test "registry digest deterministic" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let a = preg.registry_digest(reg) in
+  let b = preg.registry_digest(reg) in
+  (a == b) && str.starts_with(a, "sha256:")
+}

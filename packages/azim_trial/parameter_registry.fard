@@ -1,0 +1,79 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/rec") as rec
+
+fn parameter(id, tensor_value, trainable, created_by) {
+  {
+    id: id,
+    tensor: tensor_value,
+    shape: tensor_value.dims,
+    trainable: trainable,
+    created_by: created_by,
+    lineage: []
+  }
+}
+
+fn parameter_digest(param) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.parameter",
+    version: "2.4.0",
+    parameter: param
+  }))
+}
+
+fn registry(params) {
+  {
+    version: "2.4.0",
+    parameters: params
+  }
+}
+
+fn registry_digest(reg) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.parameter_registry",
+    version: "2.4.0",
+    registry: reg
+  }))
+}
+
+fn find_param(params, id) {
+  list.find(params, fn(p) { p.id == id })
+}
+
+fn get_param(reg, id) {
+  let found = find_param(reg.parameters, id) in
+  if rec.has(found, "some") then found.some else null
+}
+
+fn replace_param(params, updated) {
+  list.map(params, fn(p) {
+    if p.id == updated.id then updated else p
+  })
+}
+
+fn update_param(reg, id, new_tensor, update_receipt) {
+  let old = get_param(reg, id) in
+  if old == null then reg else
+  let updated = {
+    id: old.id,
+    tensor: new_tensor,
+    shape: new_tensor.dims,
+    trainable: old.trainable,
+    created_by: old.created_by,
+    lineage: list.append(old.lineage, update_receipt)
+  } in
+  {
+    version: reg.version,
+    parameters: replace_param(reg.parameters, updated)
+  }
+}
+
+fn registry_with_digest(reg) {
+  {
+    registry: reg,
+    digest: registry_digest(reg)
+  }
+}
+
+export { parameter, parameter_digest, registry, registry_digest, find_param, get_param, replace_param, update_param, registry_with_digest }
