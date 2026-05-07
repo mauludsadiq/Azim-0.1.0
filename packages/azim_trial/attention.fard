@@ -1,0 +1,49 @@
+import("std/list") as list
+import("std/math") as math
+import("std/json") as json
+import("std/hash") as hash
+import("tensor") as tensor
+import("weights") as weights
+
+fn project_sequence(vectors, W) {
+  list.map(vectors, fn(v) { tensor.matvec(W, tensor.rms_norm(v, 0.000001)) })
+}
+
+fn attention_scores(q, keys) {
+  let scale = 1.0 / math.sqrt(weights.model_config.d_model + 0.0) in
+  tensor.vector(list.build(list.len(keys), fn(i) {
+    tensor.dot(q, list.get(keys, i)) * scale
+  }))
+}
+
+fn attend(vectors) {
+  let q_all = project_sequence(vectors, weights.W_Q) in
+  let k_all = project_sequence(vectors, weights.W_K) in
+  let v_all = project_sequence(vectors, weights.W_V) in
+  let last_i = list.len(vectors) - 1 in
+  let q = list.get(q_all, last_i) in
+  let scores = attention_scores(q, k_all) in
+  let probs = tensor.softmax(scores) in
+  let mixed = list.fold(list.range(0, list.len(v_all)), tensor.vector(tensor.zeros(weights.model_config.d_model)), fn(acc, i) {
+    tensor.add(acc, tensor.scale(list.get(v_all, i), tensor.get1(probs, i)))
+  }) in
+  tensor.matvec(weights.W_O, mixed)
+}
+
+fn attention_receipt(input_vectors, output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.attention",
+    version: "0.4.0",
+    weights_sha256: weights.weights_sha256,
+    input: input_vectors,
+    output: output
+  }))
+}
+
+fn attend_with_receipt(vectors) {
+  let output = attend(vectors) in
+  let receipt = attention_receipt(vectors, output) in
+  { output: output, receipt: receipt }
+}
+
+export { project_sequence, attention_scores, attend, attention_receipt, attend_with_receipt }

@@ -1,0 +1,38 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/attention") as attn
+import("../packages/azim_trial/embedding") as emb
+import("../packages/azim_trial/weights") as weights
+
+test "project sequence preserves length" {
+  let vectors = emb.embed_text("sky") in
+  let projected = attn.project_sequence(vectors, weights.W_Q) in
+  list.len(projected) == list.len(vectors)
+}
+
+test "attention scores length matches sequence" {
+  let vectors = emb.embed_text("sky") in
+  let keys = attn.project_sequence(vectors, weights.W_K) in
+  let q = list.get(keys, list.len(keys) - 1) in
+  let scores = attn.attention_scores(q, keys) in
+  list.len(scores.data) == list.len(keys)
+}
+
+test "attend returns tensor record" {
+  let vectors = emb.embed_text("sky is blue") in
+  type.of(attn.attend(vectors)) == "record"
+}
+
+test "attend output dimension is d_model" {
+  let vectors = emb.embed_text("sky is blue") in
+  let out = attn.attend(vectors) in
+  list.len(out.data) == weights.model_config.d_model
+}
+
+test "attention receipt deterministic" {
+  let vectors = emb.embed_text("sky") in
+  let a = attn.attend_with_receipt(vectors) in
+  let b = attn.attend_with_receipt(vectors) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
