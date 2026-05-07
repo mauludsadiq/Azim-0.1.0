@@ -1,0 +1,37 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/film") as film
+import("../packages/azim_trial/embedding") as emb
+import("../packages/azim_trial/weights") as weights
+
+test "film params return record" {
+  let x = emb.embed_id(2) in
+  type.of(film.params_from_context(x)) == "record"
+}
+
+test "film scale dimension is d_model" {
+  let x = emb.embed_id(2) in
+  let params = film.params_from_context(x) in
+  list.len(params.scale.data) == weights.model_config.d_model
+}
+
+test "film shift dimension is d_model" {
+  let x = emb.embed_id(2) in
+  let params = film.params_from_context(x) in
+  list.len(params.shift.data) == weights.model_config.d_model
+}
+
+test "identity film preserves vector" {
+  let x = emb.embed_id(2) in
+  let params = film.params_from_context(x) in
+  film.apply(x, params) == x
+}
+
+test "film receipt deterministic" {
+  let x = emb.embed_id(2) in
+  let params = film.params_from_context(x) in
+  let a = film.apply_with_receipt(x, params) in
+  let b = film.apply_with_receipt(x, params) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

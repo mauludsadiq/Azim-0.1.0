@@ -1,0 +1,43 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("weights") as weights
+
+fn ones(n) {
+  tensor.vector(list.repeat(1.0, n))
+}
+
+fn zeros(n) {
+  tensor.vector(tensor.zeros(n))
+}
+
+fn params_from_context(context) {
+  {
+    scale: ones(weights.model_config.d_model),
+    shift: zeros(weights.model_config.d_model),
+    context: context
+  }
+}
+
+fn apply(x, params) {
+  tensor.add(tensor.zip_with(x, params.scale, fn(a, s) { a * s }), params.shift)
+}
+
+fn film_receipt(x, params, output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.film",
+    version: "1.2.0",
+    input: x,
+    params: params,
+    output: output
+  }))
+}
+
+fn apply_with_receipt(x, params) {
+  let output = apply(x, params) in
+  let receipt = film_receipt(x, params, output) in
+  { output: output, receipt: receipt }
+}
+
+export { ones, zeros, params_from_context, apply, film_receipt, apply_with_receipt }
