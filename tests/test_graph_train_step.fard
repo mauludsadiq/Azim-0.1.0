@@ -1,0 +1,62 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/parameter_registry") as preg
+import("../packages/azim_trial/module_graph") as mg
+import("../packages/azim_trial/graph_train_step") as gtrain
+
+test "graph train step returns record" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  type.of(gtrain.graph_train_step(reg, g, "p0", "sky is blue", "accepted", 0.01)) == "record"
+}
+
+test "graph train step ok true" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let out = gtrain.graph_train_step(reg, g, "p0", "sky is blue", "accepted", 0.01) in
+  out.ok == true
+}
+
+test "graph train step appends graph node" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let out = gtrain.graph_train_step(reg, g, "p0", "sky is blue", "accepted", 0.01) in
+  list.len(out.graph.nodes) == 1
+}
+
+test "graph train step updates parameter lineage" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let out = gtrain.graph_train_step(reg, g, "p0", "sky is blue", "accepted", 0.01) in
+  let updated = preg.get_param(out.registry, "p0") in
+  list.len(updated.lineage) == 1
+}
+
+test "graph train step missing parameter fails" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let out = gtrain.graph_train_step(reg, g, "missing", "sky is blue", "accepted", 0.01) in
+  out.ok == false
+}
+
+test "graph train receipt deterministic" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let a = gtrain.graph_train_step_with_receipt(reg, g, "p0", "sky is blue", "accepted", 0.01) in
+  let b = gtrain.graph_train_step_with_receipt(reg, g, "p0", "sky is blue", "accepted", 0.01) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

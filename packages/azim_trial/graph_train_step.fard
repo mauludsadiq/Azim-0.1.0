@@ -1,0 +1,50 @@
+import("std/json") as json
+import("std/hash") as hash
+import("module_graph") as mg
+import("parameter_registry") as preg
+import("train_step") as train
+
+fn graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) {
+  let param = preg.get_param(reg, parameter_id) in
+  if param == null then {
+    registry: reg,
+    graph: graph,
+    ok: false,
+    error: "missing parameter"
+  } else
+  let stepped = train.train_step_with_receipt(param.tensor, input_text, target_label, lr) in
+  let next_reg = preg.update_param(reg, parameter_id, stepped.step.updated_weight, stepped.receipt) in
+  let n = mg.node(
+    "train_step",
+    "azim_trial.train_step",
+    [input_text, target_label],
+    [parameter_id],
+    [stepped.step.loss_receipt, stepped.step.optimizer_receipt, stepped.receipt],
+    [parameter_id]
+  ) in
+  let next_graph = mg.append_node(graph, n) in
+  {
+    registry: next_reg,
+    graph: next_graph,
+    train_step: stepped.step,
+    train_step_receipt: stepped.receipt,
+    node_digest: mg.node_digest(n),
+    ok: true
+  }
+}
+
+fn graph_train_receipt(result) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.graph_train_step",
+    version: "2.6.0",
+    result: result
+  }))
+}
+
+fn graph_train_step_with_receipt(reg, graph, parameter_id, input_text, target_label, lr) {
+  let result = graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) in
+  let receipt = graph_train_receipt(result) in
+  { result: result, receipt: receipt }
+}
+
+export { graph_train_step, graph_train_receipt, graph_train_step_with_receipt }
