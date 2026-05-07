@@ -1,0 +1,16 @@
+import("std/json") as json
+import("packages/azim_trial/model") as model
+import("packages/azim_trial/receipts") as receipts
+
+let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" }
+let result = model.infer_claim_with_receipt(claim)
+let run_receipt = receipts.run_receipt(claim, result)
+
+{
+  ok: true,
+  package: "Azim Trial",
+  claim: claim,
+  result: result,
+  run_receipt: run_receipt,
+  manifest_sha256: receipts.manifest_sha256()
+}

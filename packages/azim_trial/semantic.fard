@@ -1,0 +1,93 @@
+import("std/rec") as rec
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+
+let world_state = {
+  sky: { color: "blue", "is-a": "atmospheric-phenomenon" },
+  grass: { color: "green", "is-a": "plant-matter" },
+  fire: { color: "orange", temperature: "hot", "is-a": "combustion" },
+  water: { color: "blue", temperature: "cold", "is-a": "liquid" }
+}
+
+let world_sha256 = hash.sha256_text(json.canonicalize(world_state))
+
+fn ok(v) { { t: "ok", v: v } }
+fn err(code, data) { { t: "err", code: code, data: data } }
+
+fn entity(subject) {
+  let e = rec.get(world_state, subject)
+  if e == null then err("unknown-entity", subject) else ok(e)
+}
+
+fn get_property(subject, property) {
+  let e = entity(subject)
+  if e.t == "err" then e else
+    let value = rec.get(e.v, property) in
+    if value == null then err("unknown-property", { subject: subject, property: property }) else ok(value)
+}
+
+fn has_property(subject, property, expected) {
+  let v = get_property(subject, property)
+  if v.t == "err" then v else ok(v.v == expected)
+}
+
+fn has_color(subject, expected) {
+  has_property(subject, "color", expected)
+}
+
+fn is_a(subject, expected) {
+  has_property(subject, "is-a", expected)
+}
+
+fn evaluate_predicate(predicate, subject, property, value) {
+  match predicate {
+    "has-color" => has_color(subject, value),
+    "has-property" => has_property(subject, property, value),
+    "is-a" => is_a(subject, value),
+    "instance-of" => is_a(subject, value),
+    _ => err("unknown-predicate", predicate)
+  }
+}
+
+fn normalize_claim(claim) {
+  {
+    predicate: rec.getOr(claim, "predicate", "has-property"),
+    subject: rec.getOr(claim, "subject", ""),
+    property: rec.getOr(claim, "property", "color"),
+    value: rec.getOr(claim, "value", "")
+  }
+}
+
+fn verdict_from_result(r) {
+  if r.t == "err" then "needs-evidence" else if r.v then "accepted" else "rejected"
+}
+
+fn evaluate_claim(claim) {
+  let c = normalize_claim(claim) in
+  let r = evaluate_predicate(c.predicate, c.subject, c.property, c.value) in
+  {
+    claim: c,
+    result: r,
+    verdict: verdict_from_result(r),
+    world_sha256: world_sha256
+  }
+}
+
+fn receipt_for_claim(claim, evaluation) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.semantic",
+    version: "0.1.0",
+    claim: claim,
+    evaluation: evaluation,
+    world_sha256: world_sha256
+  }))
+}
+
+fn evaluate_claim_with_receipt(claim) {
+  let evaluation = evaluate_claim(claim) in
+  let receipt = receipt_for_claim(claim, evaluation) in
+  { evaluation: evaluation, receipt: receipt }
+}
+
+export { world_state, world_sha256, ok, err, entity, get_property, has_property, has_color, is_a, evaluate_predicate, normalize_claim, verdict_from_result, evaluate_claim, receipt_for_claim, evaluate_claim_with_receipt }

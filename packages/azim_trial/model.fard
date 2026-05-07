@@ -1,0 +1,126 @@
+import("std/list") as list
+import("std/float") as float
+import("std/math") as math
+import("std/json") as json
+import("std/hash") as hash
+import("std/rec") as rec
+import("tokenizer") as tok
+import("tensor") as tensor
+import("weights") as weights
+import("semantic") as sem
+
+fn embed_token(token_id) {
+  return weights.embedding_row(token_id)
+}
+
+fn embed_tokens(ids) {
+  return list.map(ids, fn(id) { embed_token(id) })
+}
+
+fn mean_pool(vectors) {
+  list.get(vectors, 0)
+}
+
+fn project_sequence(vectors, W) {
+  return list.map(vectors, fn(v) { tensor.matvec(W, tensor.rms_norm(v, 0.000001)) })
+}
+
+fn attention(vectors) {
+  let q_all = project_sequence(vectors, weights.W_Q) in
+  let k_all = project_sequence(vectors, weights.W_K) in
+  let v_all = project_sequence(vectors, weights.W_V) in
+  let last_i = list.len(vectors) - 1 in
+  let q = list.get(q_all, last_i) in
+  let scores = tensor.vector(
+    list.build(list.len(k_all), fn(i) {
+      tensor.dot(q, list.get(k_all, i)) * (1.0 / math.sqrt((weights.model_config.d_model + 0.0)))
+    })
+  ) in
+  let probs = tensor.softmax(scores) in
+  let mixed = list.fold(
+    list.range(0, list.len(v_all)),
+    tensor.vector(tensor.zeros(weights.model_config.d_model)),
+    fn(acc, i) {
+      tensor.add(acc, tensor.scale(list.get(v_all, i), tensor.get1(probs, i)))
+    }
+  ) in
+  tensor.matvec(weights.W_O, mixed)
+}
+
+fn ffn(x) {
+  let x_norm = tensor.rms_norm(x, 0.000001) in
+  let gate = tensor.silu(tensor.matvec(weights.W_gate, x_norm)) in
+  let up = tensor.matvec(weights.W_up, x_norm) in
+  let act = tensor.zip_with(gate, up, fn(a, b) { a * b }) in
+  tensor.matvec(weights.W_down, act)
+}
+
+fn block(vectors) {
+  let pooled = mean_pool(vectors) in
+  let attn = attention(vectors) in
+  let h1 = tensor.add(pooled, attn) in
+  tensor.add(h1, ffn(h1))
+}
+
+fn logits_for_text(text) {
+  let ids = tok.tokenize(text) in
+  let vectors = embed_tokens(ids) in
+  let h = tensor.rms_norm(block(vectors), 0.000001) in
+  tensor.matvec(weights.W_U, h)
+}
+
+fn label_from_logits(logits) {
+  list.get(weights.label_tokens, tensor.argmax(logits.data))
+}
+
+fn neural_pass(text) {
+  let tokens = tok.tokenize_with_receipt(text) in
+  let logits = logits_for_text(text) in
+  let label = label_from_logits(logits) in
+  {
+    input_text: text,
+    tokens: tokens.tokens,
+    tokenizer_receipt: tokens.receipt,
+    logits: logits.data,
+    label: label,
+    weights_sha256: weights.weights_sha256
+  }
+}
+
+fn claim_to_text(claim) {
+  json.canonicalize(claim)
+}
+
+fn infer_claim(claim) {
+  let text = claim_to_text(claim) in
+  let neural = neural_pass(text) in
+  let semantic = sem.evaluate_claim_with_receipt(claim) in
+  {
+    model_label: neural.label,
+    semantic_verdict: semantic.evaluation.verdict,
+    final_verdict: semantic.evaluation.verdict,
+    neural: neural,
+    semantic: semantic.evaluation,
+    semantic_receipt: semantic.receipt
+  }
+}
+
+fn receipt_for_inference(claim, inference) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.model",
+    version: "0.1.0",
+    claim: claim,
+    inference: inference,
+    tokenizer_vocab_sha256: tok.vocab_sha256,
+    weights_sha256: weights.weights_sha256,
+    world_sha256: sem.world_sha256
+  }))
+}
+
+fn infer_claim_with_receipt(claim) {
+  let inference = infer_claim(claim) in
+  let receipt = receipt_for_inference(claim, inference) in
+  { inference: inference, receipt: receipt }
+}
+
+export { embed_token, embed_tokens, mean_pool, project_sequence, attention, ffn, block, logits_for_text, label_from_logits, neural_pass, claim_to_text, infer_claim, receipt_for_inference, infer_claim_with_receipt }

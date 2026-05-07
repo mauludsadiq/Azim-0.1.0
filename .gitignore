@@ -1,0 +1,7 @@
+.DS_Store
+out/
+receipts/
+packages/azim_trial/model_probe.fard
+packages/azim_trial/weights.fard:*
+tests/test_probe_*.fard
+tests/test_model.fard:*

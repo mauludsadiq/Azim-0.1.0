@@ -1,0 +1,105 @@
+import("std/str") as str
+import("std/list") as list
+import("std/rec") as rec
+import("std/hash") as hash
+import("std/json") as json
+
+let vocabulary = [
+  "<PAD>", "<UNK>", "<BOS>", "<EOS>",
+  " ", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".",
+  "/", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ":", ";", "<", "=",
+  ">", "?", "@", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L",
+  "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "[",
+  "\\", "]", "^", "_", "`", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+  "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y",
+  "z", "{", "|", "}", "~",
+  "accepted", "rejected", "needs-evidence",
+  "claim", "predicate", "fact", "world-state",
+  "subject", "property", "value", "binding",
+  "is-a", "has-color", "has-property", "located-in", "instance-of",
+  "sky", "grass", "fire", "water", "color", "blue", "green", "orange", "hot", "cold",
+  "atmospheric-phenomenon", "plant-matter", "combustion", "liquid"
+]
+
+let unk_id = 1
+let bos_id = 2
+let eos_id = 3
+let vocab_sha256 = hash.sha256_text(json.canonicalize(vocabulary))
+
+fn vocab_size() {
+  list.len(vocabulary)
+}
+
+fn vocab_map() {
+  list.fold(list.range(0, list.len(vocabulary)), rec.empty(), fn(acc, i) {
+    rec.set(acc, list.get(vocabulary, i), i)
+  })
+}
+
+fn token_id(token) {
+  rec.getOr(vocab_map(), token, unk_id)
+}
+
+fn token_at(i) {
+  if i < 0 then "<UNK>" else if i >= list.len(vocabulary) then "<UNK>" else list.get(vocabulary, i)
+}
+
+fn slice_chars(chars, start, n) {
+  str.join(list.take(list.drop(chars, start), n), "")
+}
+
+fn longest_at(text, pos) {
+  let chars = str.chars(text)
+  let remaining = list.len(chars) - pos
+  let vm = vocab_map()
+  let lengths = list.reverse(list.range(1, remaining + 1))
+  list.fold(lengths, { len: 0, id: unk_id, token: "<UNK>" }, fn(acc, n) {
+    if acc.len > 0 then acc else
+      let candidate = slice_chars(chars, pos, n) in
+      let id = rec.getOr(vm, candidate, null) in
+      if id == null then acc else { len: n, id: id, token: candidate }
+  })
+}
+
+fn tokenize_no_special(text) {
+  let chars = str.chars(text)
+  let init = { pos: 0, tokens: [] }
+  let result = while init fn(s) { s.pos < list.len(chars) } fn(s) {
+    let m = longest_at(text, s.pos)
+    let step = if m.len > 0 then m.len else 1
+    let id = if m.len > 0 then m.id else unk_id
+    { pos: s.pos + step, tokens: list.append(s.tokens, id) }
+  }
+  result.value.tokens
+}
+
+fn tokenize(text) {
+  list.concat([[bos_id], tokenize_no_special(text), [eos_id]])
+}
+
+fn detokenize_ids(ids) {
+  str.join(list.map(ids, fn(i) { token_at(i) }), "")
+}
+
+fn detokenize(ids) {
+  str.replace(str.replace(detokenize_ids(ids), "<BOS>", ""), "<EOS>", "")
+}
+
+fn receipt_for(component, version, input, output_ids) {
+  hash.sha256_text(json.canonicalize({
+    component: component,
+    version: version,
+    vocab_sha256: vocab_sha256,
+    input_utf8: input,
+    output_ids: output_ids,
+    output_text: detokenize(output_ids)
+  }))
+}
+
+fn tokenize_with_receipt(text) {
+  let ids = tokenize(text)
+  let receipt = receipt_for("azim_trial.tokenizer", "0.1.0", text, ids)
+  { tokens: ids, text: detokenize(ids), receipt: receipt, vocab_sha256: vocab_sha256 }
+}
+
+export { vocabulary, unk_id, bos_id, eos_id, vocab_sha256, vocab_size, vocab_map, token_id, token_at, longest_at, tokenize_no_special, tokenize, detokenize, receipt_for, tokenize_with_receipt }

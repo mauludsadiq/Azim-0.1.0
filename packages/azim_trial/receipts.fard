@@ -1,0 +1,42 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tokenizer") as tok
+import("weights") as weights
+import("semantic") as sem
+
+fn package_manifest() {
+  {
+    package: "Azim Trial",
+    package_id: "azim_trial",
+    version: "0.1.0",
+    language: "FARD v1.7.x",
+    components: [
+      { name: "tokenizer", vocab_sha256: tok.vocab_sha256 },
+      { name: "tensor", policy: "pure-list-row-major" },
+      { name: "weights", weights_sha256: weights.weights_sha256 },
+      { name: "semantic", world_sha256: sem.world_sha256 },
+      { name: "model", policy: "semantic-verdict-authoritative-neural-pass-traced" }
+    ]
+  }
+}
+
+fn manifest_sha256() {
+  hash.sha256_text(json.canonicalize(package_manifest()))
+}
+
+fn run_receipt(input, output) {
+  hash.sha256_text(json.canonicalize({
+    package_manifest_sha256: manifest_sha256(),
+    input: input,
+    output: output
+  }))
+}
+
+fn chain_receipts(receipts) {
+  list.fold(receipts, "sha256:0000000000000000000000000000000000000000000000000000000000000000", fn(acc, r) {
+    hash.sha256_text(json.canonicalize({ prior: acc, current: r }))
+  })
+}
+
+export { package_manifest, manifest_sha256, run_receipt, chain_receipts }

@@ -1,0 +1,29 @@
+import("std/str") as str
+import("../packages/azim_trial/semantic") as sem
+
+test "accept true color claim" {
+  let out = sem.evaluate_claim({ predicate: "has-color", subject: "sky", value: "blue" }) in
+  out.verdict == "accepted"
+}
+
+test "reject false color claim" {
+  let out = sem.evaluate_claim({ predicate: "has-color", subject: "grass", value: "blue" }) in
+  out.verdict == "rejected"
+}
+
+test "unknown entity needs evidence" {
+  let out = sem.evaluate_claim({ predicate: "has-color", subject: "moon", value: "silver" }) in
+  out.verdict == "needs-evidence"
+}
+
+test "is a predicate" {
+  let out = sem.evaluate_claim({ predicate: "is-a", subject: "fire", value: "combustion" }) in
+  out.verdict == "accepted"
+}
+
+test "semantic receipt deterministic" {
+  let claim = { predicate: "has-color", subject: "sky", value: "blue" } in
+  let a = sem.evaluate_claim_with_receipt(claim) in
+  let b = sem.evaluate_claim_with_receipt(claim) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

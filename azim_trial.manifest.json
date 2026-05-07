@@ -1,0 +1,21 @@
+{
+  "package": "Azim Trial",
+  "package_id": "azim_trial",
+  "version": "0.1.0",
+  "language": "FARD v1.7.x",
+  "entrypoint": "main.fard",
+  "modules": [
+    "packages/azim_trial/tokenizer.fard",
+    "packages/azim_trial/tensor.fard",
+    "packages/azim_trial/weights.fard",
+    "packages/azim_trial/semantic.fard",
+    "packages/azim_trial/model.fard",
+    "packages/azim_trial/receipts.fard"
+  ],
+  "tests": [
+    "tests/test_tokenizer.fard",
+    "tests/test_tensor.fard",
+    "tests/test_semantic.fard",
+    "tests/test_model.fard"
+  ]
+}

@@ -1,0 +1,136 @@
+import("std/list") as list
+import("std/rec") as rec
+import("std/math") as math
+import("std/float") as float
+import("std/json") as json
+import("std/hash") as hash
+
+fn tensor(dims, data) {
+  { dims: dims, data: data }
+}
+
+fn len(t) {
+  list.len(t.data)
+}
+
+fn shape(t) {
+  t.dims
+}
+
+fn zeros(n) {
+  list.repeat(0.0, n)
+}
+
+fn vector(xs) {
+  tensor([list.len(xs)], xs)
+}
+
+fn matrix(rows, cols, xs) {
+  tensor([rows, cols], xs)
+}
+
+fn get1(v, i) {
+  list.get(v.data, i)
+}
+
+fn get2(m, r, c) {
+  let cols = list.get(m.dims, 1)
+  list.get(m.data, r * cols + c)
+}
+
+fn set1(v, i, value) {
+  tensor(v.dims, list.set(v.data, i, value))
+}
+
+fn map(v, f) {
+  tensor(v.dims, list.map(v.data, f))
+}
+
+fn zip_with(a, b, f) {
+  tensor(a.dims, list.zip_with(a.data, b.data, f))
+}
+
+fn add(a, b) {
+  zip_with(a, b, fn(x, y) { x + y })
+}
+
+fn sub(a, b) {
+  zip_with(a, b, fn(x, y) { x - y })
+}
+
+fn scale(a, s) {
+  map(a, fn(x) { x * s })
+}
+
+fn dot(a, b) {
+  list.fold(list.range(0, list.len(a.data)), 0.0, fn(acc, i) {
+    acc + list.get(a.data, i) * list.get(b.data, i)
+  })
+}
+
+fn row(m, r) {
+  let cols = list.get(m.dims, 1)
+  vector(list.build(cols, fn(c) { get2(m, r, c) }))
+}
+
+fn col(m, c) {
+  let rows = list.get(m.dims, 0)
+  vector(list.build(rows, fn(r) { get2(m, r, c) }))
+}
+
+fn matvec(m, v) {
+  let rows = list.get(m.dims, 0)
+  vector(list.build(rows, fn(r) { dot(row(m, r), v) }))
+}
+
+fn matmul(a, b) {
+  let ar = list.get(a.dims, 0)
+  let bc = list.get(b.dims, 1)
+  matrix(ar, bc, list.build(ar * bc, fn(i) {
+    let r = float.to_int(((i + 0.0) / (bc + 0.0)))
+    let c = i % bc
+    dot(row(a, r), col(b, c))
+  }))
+}
+
+fn relu(v) {
+  map(v, fn(x) { if x < 0.0 then 0.0 else x })
+}
+
+fn silu_scalar(x) {
+  x / (1.0 + math.exp(0.0 - x))
+}
+
+fn silu(v) {
+  map(v, fn(x) { silu_scalar(x) })
+}
+
+fn rms_norm(v, eps) {
+  let n = list.len(v.data)
+  let ss = list.fold(v.data, 0.0, fn(acc, x) { acc + x * x })
+  let mean = ss / (n + 0.0)
+  let denom = math.sqrt(mean + eps)
+  map(v, fn(x) { x / denom })
+}
+
+fn softmax(v) {
+  let maxv = list.fold(v.data, list.get(v.data, 0), fn(acc, x) { if x > acc then x else acc })
+  let exps = list.map(v.data, fn(x) { math.exp(x - maxv) })
+  let total = list.fold(exps, 0.0, fn(acc, x) { acc + x })
+  vector(list.map(exps, fn(x) { x / total }))
+}
+
+fn argmax(xs) {
+  let init = { max_val: list.get(xs, 0), max_idx: 0 }
+  let result = list.fold(list.range(0, list.len(xs)), init, fn(acc, i) {
+    let v = list.get(xs, i)
+    if v > acc.max_val then { max_val: v, max_idx: i } else acc
+  })
+  result.max_idx
+}
+
+fn digest(t) {
+  hash.sha256_text(json.canonicalize(t))
+}
+
+export { tensor, len, shape, zeros, vector, matrix, get1, get2, set1, map, zip_with, add, sub, scale, dot, row, col, matvec, matmul, relu, silu_scalar, silu, rms_norm, softmax, argmax, digest }

@@ -1,0 +1,63 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+
+let model_config = {
+  name: "azim-trial-tiny-deterministic-decoder",
+  version: "0.1.0",
+  d_model: 8,
+  d_ff: 16,
+  max_seq: 64,
+  heads: 1,
+  seed_label: "azim-trial-fixed-table-v1"
+}
+
+let label_tokens = ["accepted", "rejected", "needs-evidence"]
+
+fn small_val(i) {
+  if i == 0 then 0.01 else
+  if i == 1 then 0.02 else
+  if i == 2 then 0.03 else
+  if i == 3 then 0.04 else
+  if i == 4 then 0.05 else
+  if i == 5 then 0.06 else
+  if i == 6 then 0.07 else
+  0.08
+}
+
+fn cycle8(i) {
+  if i < 8 then small_val(i) else cycle8(i - 8)
+}
+
+let W_Q = tensor.matrix(8, 8, list.build(64, fn(i) { cycle8(i) }))
+let W_K = W_Q
+let W_V = W_Q
+let W_O = W_Q
+let W_gate = tensor.matrix(16, 8, list.build(128, fn(i) { cycle8(i) }))
+let W_up = W_gate
+let W_down = tensor.matrix(8, 16, list.build(128, fn(i) { cycle8(i) }))
+let W_U = tensor.matrix(3, 8, [0.10,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.10,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.10,0.01,0.01,0.01,0.01,0.01])
+
+fn embedding_row(token_id) {
+  tensor.vector([0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08])
+}
+
+fn weights_record() {
+  {
+    config: model_config,
+    W_Q: W_Q,
+    W_K: W_K,
+    W_V: W_V,
+    W_O: W_O,
+    W_gate: W_gate,
+    W_up: W_up,
+    W_down: W_down,
+    W_U: W_U,
+    label_tokens: label_tokens
+  }
+}
+
+let weights_sha256 = hash.sha256_text(json.canonicalize(weights_record()))
+
+export { model_config, label_tokens, embedding_row, W_Q, W_K, W_V, W_O, W_gate, W_up, W_down, W_U, weights_record, weights_sha256 }

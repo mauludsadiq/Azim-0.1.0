@@ -1,0 +1,3 @@
+import("packages/azim_trial/model") as model
+
+model.infer_claim_with_receipt({ predicate: "has-color", subject: "moon", property: "color", value: "blue" })

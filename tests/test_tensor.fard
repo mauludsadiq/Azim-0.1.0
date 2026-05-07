@@ -1,0 +1,25 @@
+import("std/list") as list
+import("../packages/azim_trial/tensor") as tensor
+
+test "dot product" {
+  let a = tensor.vector([1.0, 2.0, 3.0]) in
+  let b = tensor.vector([4.0, 5.0, 6.0]) in
+  tensor.dot(a, b) == 32.0
+}
+
+test "matvec" {
+  let m = tensor.tensor([2, 2], [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([10.0, 20.0]) in
+  let y = tensor.matvec(m, v) in
+  y.data == [50.0, 110.0]
+}
+
+test "argmax tie picks lowest index" {
+  tensor.argmax([1.0, 3.0, 3.0, 2.0]) == 1
+}
+
+test "softmax length stable" {
+  let v = tensor.vector([1.0, 2.0, 3.0]) in
+  let s = tensor.softmax(v) in
+  list.len(s.data) == 3
+}

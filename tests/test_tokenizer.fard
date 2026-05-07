@@ -1,0 +1,52 @@
+import("std/list") as list
+import("std/str") as str
+import("../packages/azim_trial/tokenizer") as tok
+
+test "tokenize deterministic" {
+  let a = tok.tokenize("sky") in
+  let b = tok.tokenize("sky") in
+  a == b
+}
+
+test "tokenize includes bos eos" {
+  let ids = tok.tokenize("sky") in
+  (list.get(ids, 0) == tok.bos_id) && (list.last(ids) == tok.eos_id)
+}
+
+test "tokenize preserves whitespace" {
+  let a = tok.tokenize("sky blue") in
+  let b = tok.tokenize("skyblue") in
+  (a != b) && (tok.detokenize(a) == "sky blue")
+}
+
+test "domain token longest match" {
+  let ids = tok.tokenize_no_special("needs-evidence") in
+  (list.len(ids) == 1) && (tok.detokenize(ids) == "needs-evidence")
+}
+
+test "unknown maps to unk" {
+  let ids = tok.tokenize("hello→world") in
+  let raw = tok.detokenize(ids) in
+  str.contains(raw, "<UNK>")
+}
+
+test "empty string is bos eos" {
+  let ids = tok.tokenize("") in
+  (list.len(ids) == 2) && (list.get(ids, 0) == tok.bos_id) && (list.get(ids, 1) == tok.eos_id)
+}
+
+test "same input same tokenizer receipt" {
+  let a = tok.tokenize_with_receipt("sky") in
+  let b = tok.tokenize_with_receipt("sky") in
+  a.receipt == b.receipt
+}
+
+test "different input different tokenizer receipt" {
+  let a = tok.tokenize_with_receipt("sky") in
+  let b = tok.tokenize_with_receipt("grass") in
+  a.receipt != b.receipt
+}
+
+test "vocab hash has sha256 prefix" {
+  str.starts_with(tok.vocab_sha256, "sha256:")
+}

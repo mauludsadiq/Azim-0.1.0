@@ -1,0 +1,46 @@
+import("std/list") as list
+import("std/str") as str
+import("std/rec") as rec
+import("../packages/azim_trial/model") as model
+import("../packages/azim_trial/receipts") as receipts
+
+test "neural pass emits three logits" {
+  let out = model.neural_pass("sky is blue") in
+  list.len(out.logits) == 3
+}
+
+test "claim accepted by semantic authority" {
+  let claim = rec.empty() in
+  let claim1 = rec.set(claim, "predicate", "has-color") in
+  let claim2 = rec.set(claim1, "subject", "sky") in
+  let claim3 = rec.set(claim2, "property", "color") in
+  let claim4 = rec.set(claim3, "value", "blue") in
+  let out = model.infer_claim_with_receipt(claim4) in
+  if out.inference.final_verdict == "accepted" then str.starts_with(out.receipt, "sha256:") else false
+}
+
+test "claim rejected by semantic authority" {
+  let claim = rec.empty() in
+  let claim1 = rec.set(claim, "predicate", "has-color") in
+  let claim2 = rec.set(claim1, "subject", "sky") in
+  let claim3 = rec.set(claim2, "property", "color") in
+  let claim4 = rec.set(claim3, "value", "green") in
+  let out = model.infer_claim_with_receipt(claim4) in
+  out.inference.final_verdict == "rejected"
+}
+
+test "claim needs evidence by semantic authority" {
+  let claim = rec.empty() in
+  let claim1 = rec.set(claim, "predicate", "has-color") in
+  let claim2 = rec.set(claim1, "subject", "moon") in
+  let claim3 = rec.set(claim2, "property", "color") in
+  let claim4 = rec.set(claim3, "value", "blue") in
+  let out = model.infer_claim_with_receipt(claim4) in
+  out.inference.final_verdict == "needs-evidence"
+}
+
+test "manifest receipt stable" {
+  let a = receipts.manifest_sha256() in
+  let b = receipts.manifest_sha256() in
+  if a == b then str.starts_with(a, "sha256:") else false
+}
