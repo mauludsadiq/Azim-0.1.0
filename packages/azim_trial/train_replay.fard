@@ -1,0 +1,38 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("train_step") as train
+
+fn run_one(state, example, lr) {
+  let stepped = train.train_step_with_receipt(state.weight, example.text, example.label, lr) in
+  {
+    weight: stepped.step.updated_weight,
+    steps: list.append(state.steps, {
+      text: example.text,
+      label: example.label,
+      receipt: stepped.receipt,
+      loss: stepped.step.loss
+    })
+  }
+}
+
+fn replay(examples, initial_weight, lr) {
+  let init = { weight: initial_weight, steps: [] } in
+  list.fold(examples, init, fn(state, example) { run_one(state, example, lr) })
+}
+
+fn replay_receipt(result) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.train_replay",
+    version: "2.1.0",
+    result: result
+  }))
+}
+
+fn replay_with_receipt(examples, initial_weight, lr) {
+  let result = replay(examples, initial_weight, lr) in
+  let receipt = replay_receipt(result) in
+  { result: result, receipt: receipt }
+}
+
+export { run_one, replay, replay_receipt, replay_with_receipt }
