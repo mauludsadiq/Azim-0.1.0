@@ -1,0 +1,41 @@
+import("std/json") as json
+import("std/hash") as hash
+import("tensor") as tensor
+import("loss") as loss
+import("optimizer") as opt
+
+fn fake_gradient_like(weight_tensor, loss_value) {
+  tensor.map(weight_tensor, fn(x) { loss_value * 0.001 })
+}
+
+fn train_step(weight_tensor, input_text, target_label, lr) {
+  let loss_step = loss.loss_with_receipt(input_text, target_label) in
+  let grad = fake_gradient_like(weight_tensor, loss_step.loss) in
+  let opt_step = opt.optimizer_step_with_receipt(weight_tensor, grad, lr) in
+  {
+    input_text: input_text,
+    target_label: target_label,
+    loss: loss_step.loss,
+    loss_receipt: loss_step.receipt,
+    gradient: grad,
+    optimizer: opt_step.step,
+    optimizer_receipt: opt_step.receipt,
+    updated_weight: opt_step.step.after
+  }
+}
+
+fn train_step_receipt(step) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.train_step",
+    version: "2.0.0",
+    step: step
+  }))
+}
+
+fn train_step_with_receipt(weight_tensor, input_text, target_label, lr) {
+  let step = train_step(weight_tensor, input_text, target_label, lr) in
+  let receipt = train_step_receipt(step) in
+  { step: step, receipt: receipt }
+}
+
+export { fake_gradient_like, train_step, train_step_receipt, train_step_with_receipt }

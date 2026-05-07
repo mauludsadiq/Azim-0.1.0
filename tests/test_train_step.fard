@@ -1,0 +1,34 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/train_step") as train
+
+test "fake gradient returns tensor record" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(train.fake_gradient_like(w, 2.0)) == "record"
+}
+
+test "fake gradient preserves length" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let g = train.fake_gradient_like(w, 2.0) in
+  list.len(g.data) == list.len(w.data)
+}
+
+test "train step returns record" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(train.train_step(w, "sky is blue", "accepted", 0.01)) == "record"
+}
+
+test "train step records receipts" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let step = train.train_step(w, "sky is blue", "accepted", 0.01) in
+  str.starts_with(step.loss_receipt, "sha256:") && str.starts_with(step.optimizer_receipt, "sha256:")
+}
+
+test "train step receipt deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let a = train.train_step_with_receipt(w, "sky is blue", "accepted", 0.01) in
+  let b = train.train_step_with_receipt(w, "sky is blue", "accepted", 0.01) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
