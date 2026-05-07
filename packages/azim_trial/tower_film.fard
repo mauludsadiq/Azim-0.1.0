@@ -1,0 +1,56 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tower") as tower
+import("film") as film
+import("embedding") as emb
+import("block") as block
+
+fn film_layer(name, input_vectors, context) {
+  let raw = block.block(input_vectors) in
+  let params = film.params_from_context(context) in
+  let modulated = film.apply(raw, params) in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.tower_film.layer",
+    version: "1.3.0",
+    layer: name,
+    input: input_vectors,
+    context: context,
+    params: params,
+    output: modulated
+  })) in
+  { name: name, output: modulated, params: params, receipt: receipt }
+}
+
+fn tower_with_film(text) {
+  let vectors = emb.embed_text(text) in
+  let base_context = list.get(vectors, 0) in
+  let l0 = film_layer("L0.phoneme", vectors, base_context) in
+  let l1 = film_layer("L1.morpheme", [l0.output], l0.output) in
+  let l2 = film_layer("L2.lemma", [l1.output], l1.output) in
+  let l3 = film_layer("L3.word", [l2.output], l2.output) in
+  let l4 = film_layer("L4.phrase", [l3.output], l3.output) in
+  let l5 = film_layer("L5.clause", [l4.output], l4.output) in
+  let l6 = film_layer("L6.discourse", [l5.output], l5.output) in
+  {
+    input_text: text,
+    layers: [l0, l1, l2, l3, l4, l5, l6],
+    output: l6.output
+  }
+}
+
+fn tower_film_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.tower_film",
+    version: "1.3.0",
+    output: output
+  }))
+}
+
+fn tower_with_film_receipt(text) {
+  let out = tower_with_film(text) in
+  let receipt = tower_film_receipt(out) in
+  { tower: out, receipt: receipt }
+}
+
+export { film_layer, tower_with_film, tower_film_receipt, tower_with_film_receipt }

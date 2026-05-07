@@ -1,0 +1,32 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tower_film") as tf
+import("../packages/azim_trial/embedding") as emb
+
+test "film layer returns record" {
+  let vectors = emb.embed_text("sky") in
+  let context = list.get(vectors, 0) in
+  type.of(tf.film_layer("probe", vectors, context)) == "record"
+}
+
+test "tower film returns record" {
+  type.of(tf.tower_with_film("sky is blue")) == "record"
+}
+
+test "tower film has seven layers" {
+  let out = tf.tower_with_film("sky is blue") in
+  list.len(out.layers) == 7
+}
+
+test "tower film layer has params" {
+  let out = tf.tower_with_film("sky is blue") in
+  let l0 = list.get(out.layers, 0) in
+  type.of(l0.params) == "record"
+}
+
+test "tower film receipt deterministic" {
+  let a = tf.tower_with_film_receipt("sky is blue") in
+  let b = tf.tower_with_film_receipt("sky is blue") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
