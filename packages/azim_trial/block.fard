@@ -1,0 +1,39 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("weights") as weights
+import("attention") as attn
+
+fn ffn(x) {
+  let x_norm = tensor.rms_norm(x, 0.000001) in
+  let gate = tensor.silu(tensor.matvec(weights.W_gate, x_norm)) in
+  let up = tensor.matvec(weights.W_up, x_norm) in
+  let act = tensor.zip_with(gate, up, fn(a, b) { a * b }) in
+  tensor.matvec(weights.W_down, act)
+}
+
+fn block(vectors) {
+  let residual = list.get(vectors, 0) in
+  let attn_out = attn.attend(vectors) in
+  let h1 = tensor.add(residual, attn_out) in
+  tensor.add(h1, ffn(h1))
+}
+
+fn block_receipt(input_vectors, output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.block",
+    version: "0.5.0",
+    weights_sha256: weights.weights_sha256,
+    input: input_vectors,
+    output: output
+  }))
+}
+
+fn block_with_receipt(vectors) {
+  let output = block(vectors) in
+  let receipt = block_receipt(vectors, output) in
+  { output: output, receipt: receipt }
+}
+
+export { ffn, block, block_receipt, block_with_receipt }

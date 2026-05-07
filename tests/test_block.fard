@@ -1,0 +1,37 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/block") as block
+import("../packages/azim_trial/embedding") as emb
+import("../packages/azim_trial/weights") as weights
+
+test "ffn returns tensor record" {
+  let vectors = emb.embed_text("sky") in
+  let x = list.get(vectors, 0) in
+  type.of(block.ffn(x)) == "record"
+}
+
+test "ffn output dimension is d_model" {
+  let vectors = emb.embed_text("sky") in
+  let x = list.get(vectors, 0) in
+  let out = block.ffn(x) in
+  list.len(out.data) == weights.model_config.d_model
+}
+
+test "block returns tensor record" {
+  let vectors = emb.embed_text("sky is blue") in
+  type.of(block.block(vectors)) == "record"
+}
+
+test "block output dimension is d_model" {
+  let vectors = emb.embed_text("sky is blue") in
+  let out = block.block(vectors) in
+  list.len(out.data) == weights.model_config.d_model
+}
+
+test "block receipt deterministic" {
+  let vectors = emb.embed_text("sky") in
+  let a = block.block_with_receipt(vectors) in
+  let b = block.block_with_receipt(vectors) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
