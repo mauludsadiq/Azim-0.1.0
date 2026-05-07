@@ -1,0 +1,45 @@
+import("std/json") as json
+import("std/hash") as hash
+import("tensor") as tensor
+
+fn genesis(weight_tensor) {
+  {
+    version: "2.2.0",
+    step: 0,
+    weight: weight_tensor,
+    optimizer_state: {
+      kind: "sgd",
+      learning_rate: 0.01
+    },
+    chain_head: "sha256:genesis"
+  }
+}
+
+fn checkpoint_digest(checkpoint) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.checkpoint",
+    version: "2.2.0",
+    checkpoint: checkpoint
+  }))
+}
+
+fn advance(checkpoint, updated_weight, step_receipt) {
+  let next = {
+    version: checkpoint.version,
+    step: checkpoint.step + 1,
+    weight: updated_weight,
+    optimizer_state: checkpoint.optimizer_state,
+    chain_head: step_receipt,
+    previous_chain_head: checkpoint.chain_head
+  } in
+  next
+}
+
+fn checkpoint_with_digest(checkpoint) {
+  {
+    checkpoint: checkpoint,
+    digest: checkpoint_digest(checkpoint)
+  }
+}
+
+export { genesis, checkpoint_digest, advance, checkpoint_with_digest }

@@ -1,0 +1,43 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/checkpoint") as ckpt
+
+test "genesis returns record" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(ckpt.genesis(w)) == "record"
+}
+
+test "genesis step is zero" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  c.step == 0
+}
+
+test "checkpoint digest deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let a = ckpt.checkpoint_digest(c) in
+  let b = ckpt.checkpoint_digest(c) in
+  (a == b) && str.starts_with(a, "sha256:")
+}
+
+test "advance increments step" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let n = ckpt.advance(c, w, "sha256:step1") in
+  n.step == 1
+}
+
+test "advance records previous chain head" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  let n = ckpt.advance(c, w, "sha256:step1") in
+  n.previous_chain_head == c.chain_head
+}
+
+test "checkpoint with digest returns record" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let c = ckpt.genesis(w) in
+  type.of(ckpt.checkpoint_with_digest(c)) == "record"
+}
