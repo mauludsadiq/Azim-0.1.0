@@ -1,0 +1,31 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/loss") as loss
+import("../packages/azim_trial/logits") as logits
+
+test "label index accepted" {
+  loss.label_index("accepted") == 0
+}
+
+test "label index rejected" {
+  loss.label_index("rejected") == 1
+}
+
+test "label index fallback needs evidence" {
+  loss.label_index("needs-evidence") == 2
+}
+
+test "logsumexp returns float" {
+  type.of(loss.logsumexp([1.0, 2.0, 3.0])) == "float"
+}
+
+test "nll from logits returns float" {
+  let out = logits.logits_for_text("sky is blue") in
+  type.of(loss.nll_from_logits(out, "accepted")) == "float"
+}
+
+test "loss receipt deterministic" {
+  let a = loss.loss_with_receipt("sky is blue", "accepted") in
+  let b = loss.loss_with_receipt("sky is blue", "accepted") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

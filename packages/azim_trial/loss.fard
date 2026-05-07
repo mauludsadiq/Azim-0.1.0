@@ -1,0 +1,48 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/math") as math
+import("weights") as weights
+import("logits") as logits
+
+fn label_index(label) {
+  if label == "accepted" then 0 else
+  if label == "rejected" then 1 else
+  2
+}
+
+fn logsumexp(xs) {
+  let maxv = list.fold(xs, list.get(xs, 0), fn(acc, x) { if x > acc then x else acc }) in
+  let exps = list.map(xs, fn(x) { math.exp(x - maxv) }) in
+  let total = list.fold(exps, 0.0, fn(acc, x) { acc + x }) in
+  maxv + math.log(total)
+}
+
+fn nll_from_logits(logit_tensor, target_label) {
+  let idx = label_index(target_label) in
+  let lse = logsumexp(logit_tensor.data) in
+  lse - list.get(logit_tensor.data, idx)
+}
+
+fn loss_for_text(text, target_label) {
+  nll_from_logits(logits.logits_for_text(text), target_label)
+}
+
+fn loss_receipt(input_text, target_label, loss_value) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.loss",
+    version: "1.8.0",
+    weights_sha256: weights.weights_sha256,
+    input_text: input_text,
+    target_label: target_label,
+    loss: loss_value
+  }))
+}
+
+fn loss_with_receipt(text, target_label) {
+  let value = loss_for_text(text, target_label) in
+  let receipt = loss_receipt(text, target_label, value) in
+  { loss: value, receipt: receipt }
+}
+
+export { label_index, logsumexp, nll_from_logits, loss_for_text, loss_receipt, loss_with_receipt }
