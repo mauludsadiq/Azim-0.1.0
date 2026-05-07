@@ -1,0 +1,27 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/surface") as surface
+
+test "default accepted pairs length" {
+  list.len(surface.default_pairs_for_label("accepted")) == 2
+}
+
+test "default fallback pairs length" {
+  list.len(surface.default_pairs_for_label("needs-evidence")) == 1
+}
+
+test "generate surface returns record" {
+  type.of(surface.generate_surface("sky is blue")) == "record"
+}
+
+test "generate surface emits surfaces list" {
+  let out = surface.generate_surface("sky is blue") in
+  type.of(out.surfaces) == "list"
+}
+
+test "surface receipt deterministic" {
+  let a = surface.generate_surface_with_receipt("sky is blue") in
+  let b = surface.generate_surface_with_receipt("sky is blue") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

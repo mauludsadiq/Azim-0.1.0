@@ -1,0 +1,53 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("generation") as gen
+import("realization") as real
+
+fn default_pairs_for_label(label) {
+  if label == "accepted" then [
+    { lemma_id: "sky", class_id: "noun_singular" },
+    { lemma_id: "blue", class_id: "adjective" }
+  ] else
+  if label == "rejected" then [
+    { lemma_id: "fire", class_id: "noun_singular" },
+    { lemma_id: "green", class_id: "adjective" }
+  ] else [
+    { lemma_id: "water", class_id: "noun_singular" }
+  ]
+}
+
+fn surfaces_only(realized) {
+  list.map(realized, fn(item) { item.surface })
+}
+
+fn generate_surface(text) {
+  let label_out = gen.generate_label(text) in
+  let pairs = default_pairs_for_label(label_out.label) in
+  let realized = real.realize_sequence(pairs) in
+  {
+    input_text: text,
+    label: label_out,
+    pairs: pairs,
+    realized: realized,
+    surfaces: surfaces_only(realized),
+    realization_sha256: real.realization_sha256
+  }
+}
+
+fn surface_receipt(input_text, output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.surface",
+    version: "1.5.0",
+    input_text: input_text,
+    output: output
+  }))
+}
+
+fn generate_surface_with_receipt(text) {
+  let output = generate_surface(text) in
+  let receipt = surface_receipt(text, output) in
+  { output: output, receipt: receipt }
+}
+
+export { default_pairs_for_label, surfaces_only, generate_surface, surface_receipt, generate_surface_with_receipt }
