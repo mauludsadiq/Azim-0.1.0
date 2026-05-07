@@ -1,0 +1,29 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/logits") as logits
+import("../packages/azim_trial/weights") as weights
+
+test "hidden for text returns tensor record" {
+  type.of(logits.hidden_for_text("sky is blue")) == "record"
+}
+
+test "hidden dimension is d_model" {
+  let h = logits.hidden_for_text("sky is blue") in
+  list.len(h.data) == weights.model_config.d_model
+}
+
+test "logits for text returns tensor record" {
+  type.of(logits.logits_for_text("sky is blue")) == "record"
+}
+
+test "logits dimension is label count" {
+  let out = logits.logits_for_text("sky is blue") in
+  list.len(out.data) == list.len(weights.label_tokens)
+}
+
+test "logits receipt deterministic" {
+  let a = logits.logits_with_receipt("sky is blue") in
+  let b = logits.logits_with_receipt("sky is blue") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

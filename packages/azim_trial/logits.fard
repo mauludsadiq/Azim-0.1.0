@@ -1,0 +1,37 @@
+import("std/json") as json
+import("std/hash") as hash
+import("tensor") as tensor
+import("weights") as weights
+import("embedding") as emb
+import("block") as block
+
+fn hidden_for_text(text) {
+  let vectors = emb.embed_text(text) in
+  tensor.rms_norm(block.block(vectors), 0.000001)
+}
+
+fn logits_for_hidden(hidden) {
+  tensor.matvec(weights.W_U, hidden)
+}
+
+fn logits_for_text(text) {
+  logits_for_hidden(hidden_for_text(text))
+}
+
+fn logits_receipt(input_text, logits) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.logits",
+    version: "0.6.0",
+    weights_sha256: weights.weights_sha256,
+    input_text: input_text,
+    logits: logits
+  }))
+}
+
+fn logits_with_receipt(text) {
+  let logits = logits_for_text(text) in
+  let receipt = logits_receipt(text, logits) in
+  { logits: logits, receipt: receipt }
+}
+
+export { hidden_for_text, logits_for_hidden, logits_for_text, logits_receipt, logits_with_receipt }
