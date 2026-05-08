@@ -1,0 +1,30 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/expansion_stability") as es
+
+test "max loss delta returns float" {
+  type.of(es.max_loss_delta([1.0, 0.9, 0.85])) == "float"
+}
+
+test "stable true when loss deltas under threshold" {
+  es.stable([1.0, 0.95, 0.9], 0.1) == true
+}
+
+test "stable false when loss spike exceeds threshold" {
+  es.stable([1.0, 1.4, 0.9], 0.1) == false
+}
+
+test "stability report returns record" {
+  type.of(es.stability_report([1.0, 0.95, 0.9], 0.1, 2)) == "record"
+}
+
+test "stability report marks stable" {
+  let r = es.stability_report([1.0, 0.95, 0.9], 0.1, 2) in
+  r.stable == true
+}
+
+test "stability receipt deterministic" {
+  let a = es.stability_with_receipt([1.0, 0.95, 0.9], 0.1, 2) in
+  let b = es.stability_with_receipt([1.0, 0.95, 0.9], 0.1, 2) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

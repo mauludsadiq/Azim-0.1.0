@@ -1,0 +1,54 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+
+fn max_loss_delta(losses) {
+  let init = {
+    prev: list.get(losses, 0),
+    max_delta: 0.0
+  } in
+  let out = list.fold(losses, init, fn(acc, x) {
+    let delta = if x > acc.prev then x - acc.prev else acc.prev - x in
+    {
+      prev: x,
+      max_delta: if delta > acc.max_delta then delta else acc.max_delta
+    }
+  }) in
+  out.max_delta
+}
+
+fn stable(losses, threshold) {
+  max_loss_delta(losses) <= threshold
+}
+
+fn stability_report(losses, threshold, expansion_step) {
+  {
+    expansion_step: expansion_step,
+    threshold: threshold,
+    max_delta: max_loss_delta(losses),
+    stable: stable(losses, threshold),
+    losses: losses
+  }
+}
+
+fn stability_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.expansion_stability",
+    version: "phase5.2",
+    report: report
+  }))
+}
+
+fn stability_with_receipt(losses, threshold, expansion_step) {
+  let report = stability_report(losses, threshold, expansion_step) in
+  let receipt = stability_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  max_loss_delta,
+  stable,
+  stability_report,
+  stability_receipt,
+  stability_with_receipt
+}
