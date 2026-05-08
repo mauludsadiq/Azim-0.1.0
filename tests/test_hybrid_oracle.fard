@@ -1,0 +1,42 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/gradient_oracle") as oracle
+import("../packages/azim_trial/hybrid_oracle") as hybrid
+
+test "hybrid gradient hint returns tensor" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  type.of(hybrid.gradient_hint(w, 0.001)) == "record"
+}
+
+test "hybrid direction alignment returns float" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let g = hybrid.gradient_hint(w, 0.001) in
+  let d = oracle.basis_direction(4, 0) in
+  type.of(hybrid.direction_alignment(g, d)) == "float"
+}
+
+test "hybrid scored directions length is eight" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let scores = hybrid.scored_directions(w, 0.001) in
+  list.len(scores) == 8
+}
+
+test "hybrid returns record" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  type.of(hybrid.hybrid(w, 0.001)) == "record"
+}
+
+test "hybrid selected direction is tensor" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let out = hybrid.hybrid(w, 0.001) in
+  type.of(out.selected_direction) == "record"
+}
+
+test "hybrid receipt deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let a = hybrid.hybrid_with_receipt(w, 0.001) in
+  let b = hybrid.hybrid_with_receipt(w, 0.001) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

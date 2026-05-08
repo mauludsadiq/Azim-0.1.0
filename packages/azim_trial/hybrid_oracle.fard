@@ -1,0 +1,66 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("finite_difference_gradient") as fdg
+import("gradient_oracle") as oracle
+
+fn gradient_hint(weight_tensor, epsilon) {
+  fdg.finite_gradient(weight_tensor, epsilon)
+}
+
+fn direction_alignment(gradient, direction) {
+  tensor.dot(gradient, direction)
+}
+
+fn scored_directions(weight_tensor, epsilon) {
+  let grad = gradient_hint(weight_tensor, epsilon) in
+  let dirs = oracle.oracle_directions(list.len(weight_tensor.data)) in
+  list.map(dirs, fn(d) {
+    {
+      direction: d,
+      alignment: direction_alignment(grad, d)
+    }
+  })
+}
+
+fn best_score(scores) {
+  list.fold(scores, list.get(scores, 0), fn(best, item) {
+    if item.alignment < best.alignment then item else best
+  })
+}
+
+fn hybrid(weight_tensor, epsilon) {
+  let scores = scored_directions(weight_tensor, epsilon) in
+  let selected = best_score(scores) in
+  {
+    scores: scores,
+    selected: selected,
+    selected_direction: selected.direction,
+    selected_alignment: selected.alignment
+  }
+}
+
+fn hybrid_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.hybrid_oracle",
+    version: "phase3.1",
+    output: output
+  }))
+}
+
+fn hybrid_with_receipt(weight_tensor, epsilon) {
+  let output = hybrid(weight_tensor, epsilon) in
+  let receipt = hybrid_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export {
+  gradient_hint,
+  direction_alignment,
+  scored_directions,
+  best_score,
+  hybrid,
+  hybrid_receipt,
+  hybrid_with_receipt
+}
