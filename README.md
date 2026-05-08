@@ -310,3 +310,144 @@ The next transition is:
 deterministic inference
 →
 deterministic training
+
+
+---
+
+# Phase 1 Status — Aware-Tower Architecture
+
+Azim now implements the complete Phase 1 toy-scale Aware-Tower pathway.
+
+## Verified Components
+
+### Phase 0 — Deterministic Neural Core
+
+Implemented and receipt-verified:
+
+- tokenizer
+- embeddings + unembedding
+- single-head attention
+- transformer block
+- deterministic logits
+- argmax generation
+- lawful inference
+- semantic authority
+- receipt validator
+
+All components produce deterministic SHA-256 receipts.
+
+---
+
+## Phase 1.1 — Cross-Layer Aware-Tower
+
+Implemented in:
+
+    packages/azim_trial/cross_tower.fard
+
+The tower now contains:
+
+- 7 adjacent linguistic layers
+- cross-layer conditioning
+- FiLM modulation
+- deterministic receipts per layer
+
+Hierarchy:
+
+    L0.phoneme
+    L1.morpheme
+    L2.lemma
+    L3.word
+    L4.phrase
+    L5.clause
+    L6.discourse
+
+Verified by:
+
+    tests/test_cross_tower.fard
+
+Properties verified:
+
+- adjacent cross-layer structure
+- deterministic tower receipts
+- stable layer hierarchy
+
+---
+
+## Phase 1.2 — Causal Independence
+
+Implemented in:
+
+    packages/azim_trial/tower_independence.fard
+
+Verified by:
+
+    tests/test_tower_independence.fard
+
+The architectural invariant is now verified:
+
+    zero(L3) does not alter L0
+
+This confirms:
+
+- lower layers are causally independent
+- higher-layer collapse does not recursively corrupt lower representations
+- FiLM hierarchy preserves directional structure
+
+This is the defining architectural property of the Aware-Tower.
+
+---
+
+## Phase 1.4 — Morphological Realization Task
+
+Implemented in:
+
+    packages/azim_trial/morph_corpus.fard
+    packages/azim_trial/morph_task.fard
+
+The system now executes:
+
+    (Lemma_ID, Class_ID) -> Surface_Form
+
+Example mappings:
+
+    ("sky", "noun_plural") -> "skies"
+    ("grass", "noun_plural") -> "grasses"
+    ("blue", "adjective") -> "blue"
+
+Verified by:
+
+    tests/test_morph_corpus.fard
+    tests/test_morph_task.fard
+
+Properties verified:
+
+- lawful realization
+- deterministic realization receipts
+- correct surface realization
+- corpus-wide correctness
+
+---
+
+# Current Architectural Status
+
+Azim is no longer only a toy transformer.
+
+It is now:
+
+- deterministic
+- receipt-verifiable
+- cross-layer conditioned
+- causally independent
+- morphology-aware
+- realization-constrained
+
+The remaining roadmap items are now:
+
+- true gradient propagation
+- RSSM memory/state evolution
+- associative scan
+- distributed execution
+- asynchronous validators
+- OpenWebText-scale training
+- dual receipt systems
+- state-pack distributed checkpoints
