@@ -1,0 +1,55 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/parameter_registry") as preg
+import("../packages/azim_trial/module_graph") as mg
+import("../packages/azim_trial/graph_train_replay") as replay
+import("../packages/azim_trial/replay_verifier") as verify
+
+test "receipt ok accepts sha256" {
+  verify.receipt_ok("sha256:abc") == true
+}
+
+test "verify replay returns record" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let examples = [
+    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
+    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+  ] in
+  let out = replay.replay(examples, reg, g, 0.01) in
+  let updated = preg.get_param(out.registry, "p0") in
+  type.of(verify.verify_replay(out, updated)) == "record"
+}
+
+test "verify replay ok true" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let examples = [
+    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
+    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+  ] in
+  let out = replay.replay(examples, reg, g, 0.01) in
+  let updated = preg.get_param(out.registry, "p0") in
+  verify.verify_replay(out, updated).ok == true
+}
+
+test "verify replay receipt deterministic" {
+  let t = tensor.vector([1.0, 2.0, 3.0]) in
+  let p = preg.parameter("p0", t, true, "test") in
+  let reg = preg.registry([p]) in
+  let g = mg.graph([]) in
+  let examples = [
+    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
+    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+  ] in
+  let out = replay.replay(examples, reg, g, 0.01) in
+  let updated = preg.get_param(out.registry, "p0") in
+  let a = verify.verify_replay_with_receipt(out, updated) in
+  let b = verify.verify_replay_with_receipt(out, updated) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

@@ -1,0 +1,49 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn event_ok(event) {
+  event.ok == true && receipt_ok(event.graph_train_receipt)
+}
+
+fn events_ok(events) {
+  list.all(events, fn(e) { event_ok(e) })
+}
+
+fn graph_count_matches_events(result) {
+  list.len(result.graph.nodes) == list.len(result.events)
+}
+
+fn parameter_lineage_matches_events(param, events) {
+  list.len(param.lineage) == list.len(events)
+}
+
+fn verify_replay(result, parameter) {
+  {
+    events_ok: events_ok(result.events),
+    graph_count_ok: graph_count_matches_events(result),
+    lineage_count_ok: parameter_lineage_matches_events(parameter, result.events),
+    ok: events_ok(result.events) && graph_count_matches_events(result) && parameter_lineage_matches_events(parameter, result.events)
+  }
+}
+
+fn verification_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.replay_verifier",
+    version: "2.8.0",
+    report: report
+  }))
+}
+
+fn verify_replay_with_receipt(result, parameter) {
+  let report = verify_replay(result, parameter) in
+  let receipt = verification_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export { receipt_ok, event_ok, events_ok, graph_count_matches_events, parameter_lineage_matches_events, verify_replay, verification_receipt, verify_replay_with_receipt }
