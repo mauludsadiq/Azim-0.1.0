@@ -1,0 +1,48 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/validator_thresholds") as vt
+import("../packages/azim_trial/backpressure_protocol") as bp
+
+test "validator signal returns record" {
+  let t = vt.thresholds(0.5, 0.8) in
+  type.of(bp.validator_signal("sha256:probe", 0.2, t)) == "record"
+}
+
+test "ok signal continues" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let s = bp.validator_signal("sha256:probe", 0.2, t) in
+  bp.training_action(s) == "continue"
+}
+
+test "warning signal adjusts film" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let s = bp.validator_signal("sha256:probe", 0.6, t) in
+  bp.training_action(s) == "adjust_film"
+}
+
+test "emergency signal pauses" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let s = bp.validator_signal("sha256:probe", 0.9, t) in
+  bp.training_action(s) == "pause_and_signal"
+}
+
+test "warning may commit next step" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let s = bp.validator_signal("sha256:probe", 0.6, t) in
+  let r = bp.backpressure_report(s) in
+  r.may_commit_next_step == true
+}
+
+test "emergency pauses commit" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let s = bp.validator_signal("sha256:probe", 0.9, t) in
+  let r = bp.backpressure_report(s) in
+  r.paused == true
+}
+
+test "backpressure receipt deterministic" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let a = bp.backpressure_with_receipt("sha256:probe", 0.6, t) in
+  let b = bp.backpressure_with_receipt("sha256:probe", 0.6, t) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

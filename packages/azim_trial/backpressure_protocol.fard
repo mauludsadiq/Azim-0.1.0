@@ -1,0 +1,54 @@
+import("std/json") as json
+import("std/hash") as hash
+import("validator_thresholds") as vt
+
+fn validator_signal(probe_receipt, score, thresholds) {
+  let report = vt.threshold_report(score, thresholds) in
+  {
+    probe_receipt: probe_receipt,
+    score: score,
+    status: report.status,
+    warning: report.warning,
+    emergency: report.emergency,
+    ok: report.ok
+  }
+}
+
+fn training_action(signal) {
+  if signal.emergency then "pause_and_signal" else
+  if signal.warning then "adjust_film" else
+  "continue"
+}
+
+fn backpressure_report(signal) {
+  let action = training_action(signal) in
+  {
+    signal: signal,
+    action: action,
+    may_commit_next_step: action == "continue" || action == "adjust_film",
+    paused: action == "pause_and_signal"
+  }
+}
+
+fn backpressure_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.backpressure_protocol",
+    version: "phase7.2",
+    report: report
+  }))
+}
+
+fn backpressure_with_receipt(probe_receipt, score, thresholds) {
+  let signal = validator_signal(probe_receipt, score, thresholds) in
+  let report = backpressure_report(signal) in
+  let receipt = backpressure_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  validator_signal,
+  training_action,
+  backpressure_report,
+  backpressure_receipt,
+  backpressure_with_receipt
+}
