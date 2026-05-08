@@ -1,0 +1,40 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/validator_thresholds") as vt
+
+test "thresholds returns record" {
+  type.of(vt.thresholds(0.5, 0.8)) == "record"
+}
+
+test "classify ok below warning" {
+  let t = vt.thresholds(0.5, 0.8) in
+  vt.classify(0.2, t) == "ok"
+}
+
+test "classify warning above warning" {
+  let t = vt.thresholds(0.5, 0.8) in
+  vt.classify(0.6, t) == "warning"
+}
+
+test "classify emergency above emergency" {
+  let t = vt.thresholds(0.5, 0.8) in
+  vt.classify(0.9, t) == "emergency"
+}
+
+test "threshold report returns record" {
+  let t = vt.thresholds(0.5, 0.8) in
+  type.of(vt.threshold_report(0.6, t)) == "record"
+}
+
+test "threshold report warning true" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let r = vt.threshold_report(0.6, t) in
+  r.warning == true
+}
+
+test "threshold receipt deterministic" {
+  let t = vt.thresholds(0.5, 0.8) in
+  let a = vt.threshold_with_receipt(0.6, t) in
+  let b = vt.threshold_with_receipt(0.6, t) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

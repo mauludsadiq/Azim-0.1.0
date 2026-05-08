@@ -1,0 +1,49 @@
+import("std/json") as json
+import("std/hash") as hash
+
+fn thresholds(warning_score, emergency_score) {
+  {
+    warning_score: warning_score,
+    emergency_score: emergency_score
+  }
+}
+
+fn classify(score, t) {
+  if score >= t.emergency_score then "emergency" else
+  if score >= t.warning_score then "warning" else
+  "ok"
+}
+
+fn threshold_report(score, t) {
+  let status = classify(score, t) in
+  {
+    score: score,
+    thresholds: t,
+    status: status,
+    warning: status == "warning",
+    emergency: status == "emergency",
+    ok: status == "ok"
+  }
+}
+
+fn threshold_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.validator_thresholds",
+    version: "phase7.1",
+    report: report
+  }))
+}
+
+fn threshold_with_receipt(score, t) {
+  let report = threshold_report(score, t) in
+  let receipt = threshold_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  thresholds,
+  classify,
+  threshold_report,
+  threshold_receipt,
+  threshold_with_receipt
+}
