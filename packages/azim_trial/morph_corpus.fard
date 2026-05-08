@@ -1,0 +1,48 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+
+fn example(input_text, lemma_id, class_id, expected_surface) {
+  {
+    input_text: input_text,
+    lemma_id: lemma_id,
+    class_id: class_id,
+    expected_surface: expected_surface
+  }
+}
+
+fn toy() {
+  [
+    example("realize sky singular", "sky", "noun_singular", "sky"),
+    example("realize sky plural", "sky", "noun_plural", "skies"),
+    example("realize grass singular", "grass", "noun_singular", "grass"),
+    example("realize grass plural", "grass", "noun_plural", "grasses"),
+    example("realize blue adjective", "blue", "adjective", "blue"),
+    example("realize green adjective", "green", "adjective", "green")
+  ]
+}
+
+fn corpus() {
+  let examples = toy() in
+  {
+    version: "phase1.4",
+    name: "toy_morphological_realization",
+    examples: examples,
+    count: list.len(examples)
+  }
+}
+
+fn corpus_digest(c) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.morph_corpus",
+    version: "phase1.4",
+    corpus: c
+  }))
+}
+
+fn corpus_with_digest() {
+  let c = corpus() in
+  { corpus: c, digest: corpus_digest(c) }
+}
+
+export { example, toy, corpus, corpus_digest, corpus_with_digest }

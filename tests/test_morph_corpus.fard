@@ -1,0 +1,28 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/morph_corpus") as mc
+
+test "morph example returns record" {
+  type.of(mc.example("realize sky plural", "sky", "noun_plural", "skies")) == "record"
+}
+
+test "toy morph corpus has examples" {
+  list.len(mc.toy()) == 6
+}
+
+test "morph corpus returns record" {
+  type.of(mc.corpus()) == "record"
+}
+
+test "morph corpus count matches toy length" {
+  let c = mc.corpus() in
+  c.count == list.len(mc.toy())
+}
+
+test "morph corpus digest deterministic" {
+  let c = mc.corpus() in
+  let a = mc.corpus_digest(c) in
+  let b = mc.corpus_digest(c) in
+  (a == b) && str.starts_with(a, "sha256:")
+}

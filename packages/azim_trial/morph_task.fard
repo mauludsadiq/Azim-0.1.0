@@ -1,0 +1,49 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("realization") as real
+import("morph_corpus") as mc
+
+fn run_example(example) {
+  let surface = real.realize(example.lemma_id, example.class_id) in
+  {
+    input_text: example.input_text,
+    lemma_id: example.lemma_id,
+    class_id: example.class_id,
+    expected_surface: example.expected_surface,
+    actual_surface: surface,
+    lawful: real.legal_pair(example.lemma_id, example.class_id),
+    correct: surface == example.expected_surface
+  }
+}
+
+fn run_corpus(corpus_obj) {
+  let results = list.map(corpus_obj.examples, fn(e) { run_example(e) }) in
+  {
+    corpus_name: corpus_obj.name,
+    count: corpus_obj.count,
+    results: results,
+    all_lawful: list.all(results, fn(r) { r.lawful == true }),
+    all_correct: list.all(results, fn(r) { r.correct == true })
+  }
+}
+
+fn run_toy() {
+  run_corpus(mc.corpus())
+}
+
+fn task_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.morph_task",
+    version: "phase1.4",
+    output: output
+  }))
+}
+
+fn run_toy_with_receipt() {
+  let output = run_toy() in
+  let receipt = task_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export { run_example, run_corpus, run_toy, task_receipt, run_toy_with_receipt }
