@@ -1,0 +1,33 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/embedding") as emb
+import("../packages/azim_trial/cross_tower") as ct
+
+test "cross merge returns tensor record" {
+  let vectors = emb.embed_text("sky") in
+  let x = list.get(vectors, 0) in
+  type.of(ct.cross_merge(x, x)) == "record"
+}
+
+test "cross tower returns record" {
+  type.of(ct.tower("sky is blue")) == "record"
+}
+
+test "cross tower has seven layers" {
+  let out = ct.tower("sky is blue") in
+  list.len(out.layers) == 7
+}
+
+test "cross tower names adjacent hierarchy" {
+  let out = ct.tower("sky is blue") in
+  let l1 = list.get(out.layers, 1) in
+  let l6 = list.get(out.layers, 6) in
+  (l1.name == "L1.morpheme") && (l6.name == "L6.discourse")
+}
+
+test "cross tower receipt deterministic" {
+  let a = ct.tower_with_receipt("sky is blue") in
+  let b = ct.tower_with_receipt("sky is blue") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

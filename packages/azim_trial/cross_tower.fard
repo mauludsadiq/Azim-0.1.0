@@ -1,0 +1,67 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("embedding") as emb
+import("block") as block
+import("film") as film
+import("tensor") as tensor
+
+fn cross_merge(lower_output, current_output) {
+  tensor.scale(tensor.add(lower_output, current_output), 0.5)
+}
+
+fn cross_layer(name, input_vectors, lower_context, film_context) {
+  let self_out = block.block(input_vectors) in
+  let crossed = cross_merge(lower_context, self_out) in
+  let params = film.params_from_context(film_context) in
+  let modulated = film.apply(crossed, params) in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.cross_tower.layer",
+    version: "phase1.1",
+    layer: name,
+    input: input_vectors,
+    lower_context: lower_context,
+    film_context: film_context,
+    output: modulated
+  })) in
+  { name: name, output: modulated, receipt: receipt }
+}
+
+fn tower(text) {
+  let vectors = emb.embed_text(text) in
+  let base = list.get(vectors, 0) in
+
+  let l0_raw = block.block(vectors) in
+  let l0_params = film.params_from_context(base) in
+  let l0_out = film.apply(l0_raw, l0_params) in
+  let l0 = { name: "L0.phoneme", output: l0_out } in
+
+  let l1 = cross_layer("L1.morpheme", [l0.output], l0.output, l0.output) in
+  let l2 = cross_layer("L2.lemma", [l1.output], l1.output, l1.output) in
+  let l3 = cross_layer("L3.word", [l2.output], l2.output, l2.output) in
+  let l4 = cross_layer("L4.phrase", [l3.output], l3.output, l3.output) in
+  let l5 = cross_layer("L5.clause", [l4.output], l4.output, l4.output) in
+  let l6 = cross_layer("L6.discourse", [l5.output], l5.output, l5.output) in
+
+  {
+    input_text: text,
+    layers: [l0, l1, l2, l3, l4, l5, l6],
+    output: l6.output
+  }
+}
+
+fn tower_receipt(out) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.cross_tower",
+    version: "phase1.1",
+    output: out
+  }))
+}
+
+fn tower_with_receipt(text) {
+  let out = tower(text) in
+  let receipt = tower_receipt(out) in
+  { tower: out, receipt: receipt }
+}
+
+export { cross_merge, cross_layer, tower, tower_receipt, tower_with_receipt }
