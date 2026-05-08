@@ -2,55 +2,48 @@
 
 Azim is a deterministic AI architecture implemented in FARD.
 
-The architecture separates:
+The system replaces opaque stochastic training and hardware-dependent execution with:
 
-- world-state memory
-- linguistic realization
 - deterministic optimization
-- hardware realization
-- distributed verification
-
-into independently verifiable systems with replayable SHA-256 receipts.
-
-Azim is not a monolithic stochastic transformer.
-
-It is a receipt-driven architecture built around:
-
-- deterministic execution
-- lawful realization
 - recurrent semantic memory
-- orthogonal optimization
-- hardware-independent verification
-- distributed replay
-- causal isolation
+- lawful realization
+- replay-verifiable execution
+- dual-receipt verification
+- distributed deterministic training
+- adaptive optimization geometry
+- hardware-independent validation
+
+Every subsystem produces replayable SHA-256 receipts.
 
 ---
 
 # Core Invariant
 
-text same inputs -> same outputs -> same receipts 
+text id="7fq1sw" same inputs -> same outputs -> same receipts 
 
 Receipts commit to:
 
 - inputs
 - outputs
-- execution graph
-- runtime configuration
-- subsystem state
-- optimization path
+- optimization paths
+- module graphs
+- distributed updates
 - implementation strategy
+- training topology
+- execution traces
 
 ---
 
 # Architecture
 
-| Component | Responsibility |
+| Layer | Responsibility |
 |---|---|
 | RSSM | recurrent semantic memory |
-| Aware-Tower | language realization |
+| Aware-Tower | linguistic realization |
 | Gradient Oracle | deterministic optimization |
 | Dual-Receipt Layer | hardware-independent verification |
 | Basis Expansion | adaptive optimization geometry |
+| State Pack CDN | distributed deterministic execution |
 
 ---
 
@@ -62,24 +55,23 @@ Implemented:
 - embedding
 - attention
 - transformer blocks
-- logits
 - generation
 - semantic validation
 - deterministic replay
 
 Core modules:
 
-text tokenizer tensor embedding attention block logits generation semantic validator 
+text id="x6f7h9" tokenizer tensor embedding attention block logits generation semantic validator 
 
 ---
 
 # Phase 1 — Aware-Tower ✓
 
-The Aware-Tower separates language into causal hierarchical layers.
+Azim separates language into causal realization layers.
 
 Hierarchy:
 
-text L0 phoneme L1 morpheme L2 lemma L3 word L4 phrase L5 clause L6 discourse 
+text id="85qn9m" L0 phoneme L1 morpheme L2 lemma L3 word L4 phrase L5 clause L6 discourse 
 
 Implemented:
 
@@ -89,36 +81,29 @@ Implemented:
 - causal independence validation
 - lawful generation
 
-Verified:
+Invariant:
 
-text higher layers do not collapse lower representations 
+text id="g5ecpa" higher realization layers do not collapse lower semantic layers 
 
 ---
 
 # Morphological Realization
 
-Azim generates language through lawful realization pairs:
+Surface generation proceeds through lawful realization pairs:
 
-text (lemma_id, class_id) 
+text id="oqr6y9" (lemma_id, class_id) 
 
 Example:
 
-text ("sky", "noun_plural") -> "skies" 
+text id="zyd93k" ("sky", "noun_plural") -> "skies" 
 
-Implemented:
-
-- realization maps
-- lawful pair validation
-- surface realization
-- realization receipts
-
-Illegal realization pairs fail safely.
+Illegal realization pairs fail deterministically.
 
 ---
 
 # Phase 2 — RSSM + Associative Scan ✓
 
-The RSSM manages recurrent semantic memory.
+The RSSM manages recurrent semantic state independently from linguistic realization.
 
 Implemented:
 
@@ -131,38 +116,32 @@ Implemented:
 
 Core recurrence:
 
-text h_t = f(h_(t-1), x_t) 
+text id="yjlwm4" h_t = f(h_(t-1), x_t) 
 
 Associative scan verified:
 
-text parallel scan == sequential recurrence 
-
-This establishes deterministic recurrent parallelization.
+text id="jvz0zt" parallel recurrence == sequential recurrence 
 
 ---
 
-# RSSM ↔ Tower Separation
+# RSSM ↔ Tower Allocation
 
-Structural allocation enforced:
+Structural split enforced:
 
 | Component | Allocation |
 |---|---|
 | RSSM | 80% |
 | Tower | 20% |
 
-RSSM handles semantic memory.
-
-Tower handles syntax and realization.
-
-Leakage probes verify RSSM does not absorb linguistic structure.
+Leakage probes verify semantic memory does not absorb linguistic realization.
 
 Leakage condition:
 
-text rssm_score >= tower_score 
+text id="8zh6v7" rssm_score >= tower_score 
 
-Clean split:
+Healthy separation:
 
-text rssm_score < tower_score 
+text id="s50s7n" rssm_score < tower_score 
 
 ---
 
@@ -183,7 +162,7 @@ Implemented:
 
 # 8-Direction Orthogonal Oracle
 
-Optimization proceeds through deterministic orthogonal directions.
+Optimization occurs through deterministic orthogonal search directions.
 
 Implemented:
 
@@ -192,9 +171,9 @@ Implemented:
 - oracle scoring
 - deterministic receipts
 
-Search space:
+Search geometry:
 
-text 8 orthogonal update directions 
+text id="n4jz8d" 8 orthogonal update directions 
 
 instead of unconstrained stochastic updates.
 
@@ -206,10 +185,8 @@ The hybrid oracle combines:
 
 | Component | Role |
 |---|---|
-| gradient hint | fast directional guidance |
+| gradient hint | directional acceleration |
 | discrete oracle | deterministic constrained optimization |
-
-This preserves deterministic guarantees while improving convergence.
 
 Implemented:
 
@@ -222,26 +199,26 @@ Implemented:
 
 # Gradient Variance Monitoring
 
-Cosine similarity tracks optimization stability.
+Cosine similarity tracks optimization curvature.
 
 Implemented:
 
 - vector norms
 - cosine similarity
-- basis expansion triggers
 - variance receipts
+- basis expansion triggers
 
 Examples:
 
-text same direction     -> 1.0 orthogonal update  -> 0.0 
+text id="k0t77v" same direction     -> 1.0 orthogonal update  -> 0.0 
 
 Expansion trigger:
 
-text cos_sim < 0.5 
+text id="jlwm77" cos_sim < 0.5 
 
 ---
 
-# Medium-Scale Training
+# Medium-Scale Training ✓
 
 Verified manifests:
 
@@ -262,31 +239,23 @@ Each validates:
 
 # Phase 4 — Dual-Receipt Protocol ✓
 
-Phase 4 introduces hardware-independent verification.
-
 Azim separates:
 
 | Receipt | Meaning |
 |---|---|
 | math_receipt | mathematical truth |
-| impl_receipt | hardware/runtime realization |
+| impl_receipt | runtime/hardware realization |
 
-Different hardware implementations may differ internally while preserving identical mathematical execution.
+Invariant:
 
----
-
-# Dual-Receipt Invariant
-
-Core invariant:
-
-text same math != same implementation 
+text id="91du4n" same math != same implementation 
 
 Implemented:
 
-- math receipts
+- mathematical receipts
 - implementation receipts
-- dual verification reports
-- deterministic forensic receipts
+- forensic verification
+- deterministic replay
 
 ---
 
@@ -296,14 +265,16 @@ Implemented:
 
 - configurable tiling
 - blocked matvec execution
-- tile-aware implementation receipts
-- math-stable receipts
+- implementation-aware receipts
+- math-stable verification
 
 Verified:
 
-text same math receipt across tile sizes 
+text id="ryxj6d" same math receipt across tile sizes 
 
-while implementation receipts differ.
+while:
+
+text id="cx7mew" implementation receipts differ 
 
 ---
 
@@ -312,23 +283,22 @@ while implementation receipts differ.
 Implemented:
 
 - CPU/GPU verification
-- cross-hardware receipt comparison
-- implementation divergence verification
-- mathematical equivalence validation
+- implementation divergence validation
+- mathematical equivalence verification
 
 Verified:
 
-text cpu.math_receipt == gpu.math_receipt 
+text id="tdkzhq" cpu.math_receipt == gpu.math_receipt 
 
 while:
 
-text cpu.impl_receipt != gpu.impl_receipt 
+text id="n4i0r5" cpu.impl_receipt != gpu.impl_receipt 
 
-This establishes hardware-independent mathematical verification.
+This establishes hardware-independent mathematical replay.
 
 ---
 
-# Large-Scale Training
+# Large-Scale Training ✓
 
 Verified manifests:
 
@@ -340,7 +310,7 @@ Verified manifests:
 
 Each validates:
 
-- dual-receipt enforcement
+- dual receipts
 - cross-hardware verification
 - structural allocation
 - deterministic receipts
@@ -349,39 +319,39 @@ Each validates:
 
 # Phase 5 — Dynamic Basis Expansion ✓
 
-Phase 5 introduces adaptive optimization geometry.
+Azim introduces adaptive optimization geometry.
 
 Implemented:
 
 - dynamic basis expansion
-- CosSim-triggered expansion
 - graph-signed expansion events
+- cosine-triggered basis growth
 - expansion stability validation
 
-Expansion chain:
+Expansion path:
 
-text 8 -> 16 -> 32 
+text id="xcn41x" 8 -> 16 -> 32 
 
-Expansion triggers when cosine similarity drops below threshold.
+Expansion triggers when optimization curvature increases.
 
 ---
 
-# Dynamic Expansion
+# Dynamic Basis Expansion
 
-Expansion behavior verified:
+Verified behavior:
 
-text cos_sim < threshold -> expand basis cos_sim >= threshold -> retain basis 
+text id="d3gn0i" cos_sim < threshold -> expand basis cos_sim >= threshold -> retain basis 
 
 Implemented:
 
 - expansion triggers
 - deterministic expansion receipts
-- expansion path replay
+- replayable expansion paths
 - basis growth validation
 
 Verified:
 
-text 8 -> 16 16 -> 32 32 -> 32 
+text id="4h6g4j" 8 -> 16 16 -> 32 32 -> 32 
 
 ---
 
@@ -391,14 +361,14 @@ Expansion events are signed into the module graph.
 
 Each event records:
 
-- trigger reason
 - cosine similarity
-- prior basis size
+- trigger reason
+- previous basis size
 - next basis size
 - event receipt
 - graph digest
 
-Replay reproduces the exact optimization expansion path.
+Replay reproduces the exact optimization expansion history.
 
 ---
 
@@ -408,56 +378,156 @@ Implemented:
 
 - max loss delta tracking
 - spike detection
-- stability thresholds
 - deterministic stability receipts
 
 Validated:
 
-text basis expansion does not create loss spikes 
+text id="48t9x9" basis expansion does not destabilize optimization 
 
 Stability condition:
 
-text max_loss_delta <= threshold 
+text id="eiz9pz" max_loss_delta <= threshold 
+
+---
+
+# Phase 6 — Distributed Training & State Pack CDN ✓
+
+Phase 6 introduces deterministic distributed execution.
+
+Implemented:
+
+- State Pack cluster configuration
+- distributed determinism
+- distributed associative scan
+- 1.5B cluster training manifests
+
+---
+
+# State Pack Cluster
+
+Verified cluster:
+
+| Nodes | Parameters |
+|---|---|
+| 3 | 1.5B |
+
+Node allocation:
+
+| Node | Role |
+|---|---|
+| node-1 | RSSM |
+| node-2 | RSSM |
+| node-3 | Tower |
+
+Cluster manifests produce deterministic receipts.
+
+---
+
+# Distributed Determinism
+
+Implemented:
+
+- verified node updates
+- merge digests
+- deterministic distributed replay
+- race-condition elimination
+
+Invariant:
+
+text id="hv8ewz" distributed execution remains pure-function deterministic 
+
+Each node produces independently verifiable updates.
+
+Merge digests carry SHA-256 receipts.
+
+---
+
+# Distributed Associative Scan
+
+RSSM recurrence now parallelizes across nodes.
+
+Implemented:
+
+- sequence partitioning
+- node-local scans
+- deterministic merge
+- distributed scan receipts
+
+Verified:
+
+text id="c29oeq" distributed scan == sequential scan 
+
+with bit-identical outputs.
+
+Communication complexity:
+
+text id="yokjvu" O(log N) 
+
+---
+
+# 1.5B Cluster Run ✓
+
+Full distributed cluster run verified.
+
+Implemented:
+
+- distributed RSSM execution
+- distributed deterministic updates
+- distributed associative scan
+- replayable cluster receipts
+
+Verified:
+
+| Property | Status |
+|---|---|
+| equivalent scan | ✓ |
+| deterministic updates | ✓ |
+| replay receipts | ✓ |
+| 1.5B allocation | ✓ |
+
+Cluster run invariant:
+
+text id="chgjqz" distributed replay produces identical receipts 
 
 ---
 
 # Current Status
 
-text Phase 0 ✓ Deterministic Runtime Phase 1 ✓ Aware-Tower Phase 2 ✓ RSSM + Associative Scan Phase 3 ✓ Gradient Oracle Phase 4 ✓ Dual-Receipt Protocol Phase 5 ✓ Dynamic Basis Expansion Phase 6 ⬜ Distributed / State Pack CDN Phase 7 ⬜ Asynchronous Validator Phase 8 ⬜ OpenWebText Run 
+text id="4jlwmr" Phase 0 ✓ Deterministic Runtime Phase 1 ✓ Aware-Tower Phase 2 ✓ RSSM + Associative Scan Phase 3 ✓ Gradient Oracle Phase 4 ✓ Dual-Receipt Protocol Phase 5 ✓ Dynamic Basis Expansion Phase 6 ✓ Distributed Training & State Pack CDN Phase 7 ⬜ Asynchronous Validator Phase 8 ⬜ OpenWebText Run 
 
 ---
 
 # Repository Structure
 
-text packages/azim_trial/ tests/ 
+text id="mwj3ka" packages/azim_trial/ tests/ 
 
 Major modules:
 
-text tokenizer tensor embedding attention block cross_tower film realization surface rssm rssm_tower_bridge associative_scan structural_allocation leakage_probe scale_manifest gradient_oracle hybrid_oracle gradient_variance medium_training_manifest dual_receipt tiling_engine cross_hardware_verify large_training_manifest basis_expansion basis_graph_events expansion_stability 
+text id="9zk55k" tokenizer tensor embedding attention block cross_tower film realization surface rssm rssm_tower_bridge associative_scan structural_allocation leakage_probe gradient_oracle hybrid_oracle gradient_variance dual_receipt tiling_engine cross_hardware_verify basis_expansion basis_graph_events expansion_stability state_pack_cluster distributed_determinism distributed_scan cluster_run_1p5b 
 
 ---
 
 # Running Tests
 
-Basis expansion:
+Distributed determinism:
 
-bash fardrun test --program tests/test_basis_expansion.fard 
+bash id="0gvgzk" fardrun test --program tests/test_distributed_determinism.fard 
 
-Graph event signing:
+Distributed associative scan:
 
-bash fardrun test --program tests/test_basis_graph_events.fard 
+bash id="0xmqrx" fardrun test --program tests/test_distributed_scan.fard 
+
+1.5B cluster run:
+
+bash id="5ol0l0" fardrun test --program tests/test_cluster_run_1p5b.fard 
 
 Expansion stability:
 
-bash fardrun test --program tests/test_expansion_stability.fard 
+bash id="b1n6uy" fardrun test --program tests/test_expansion_stability.fard 
 
 Cross-hardware verification:
 
-bash fardrun test --program tests/test_cross_hardware_verify.fard 
-
-Large manifests:
-
-bash fardrun test --program tests/test_large_training_manifest.fard 
+bash id="4qxv07" fardrun test --program tests/test_cross_hardware_verify.fard 
 
 ---
 
@@ -465,24 +535,24 @@ bash fardrun test --program tests/test_large_training_manifest.fard
 
 Azim explores whether AI systems can be built around:
 
-- deterministic execution
-- replay verification
+- deterministic optimization
+- replayable execution
 - recurrent semantic memory
 - lawful realization
-- orthogonal optimization
 - adaptive optimization geometry
 - hardware-independent verification
-- distributed validation
+- distributed deterministic training
+- forensic replay
 
-instead of opaque stochastic monolithic transformers.
+instead of opaque stochastic transformer training.
 
 The architecture attempts to preserve:
 
+- exact replay
 - deterministic recurrence
-- replayable optimization
 - lawful generation
 - causal isolation
-- recurrent world models
-- forensic hardware verification
-- exact optimization replay
-- signed adaptive training paths
+- distributed purity
+- optimization traceability
+- hardware-independent verification
+- replayable distributed execution
