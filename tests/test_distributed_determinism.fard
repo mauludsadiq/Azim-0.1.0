@@ -1,0 +1,36 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/distributed_determinism") as dd
+
+test "node update returns record" {
+  type.of(dd.node_update("node-1", { step: 0 }, { step: 1 }, { value: 1 }, { value: 1 })) == "record"
+}
+
+test "node update ok true" {
+  let u = dd.node_update("node-1", { step: 0 }, { step: 1 }, { value: 1 }, { value: 1 }) in
+  dd.update_ok(u) == true
+}
+
+test "all updates ok true" {
+  let a = dd.node_update("node-1", { step: 0 }, { step: 1 }, { value: 1 }, { value: 1 }) in
+  let b = dd.node_update("node-2", { step: 0 }, { step: 1 }, { value: 2 }, { value: 2 }) in
+  dd.all_updates_ok([a, b]) == true
+}
+
+test "merge digest has sha256 prefix" {
+  let a = dd.node_update("node-1", { step: 0 }, { step: 1 }, { value: 1 }, { value: 1 }) in
+  str.starts_with(dd.merge_digest([a]), "sha256:")
+}
+
+test "determinism report ok true" {
+  let a = dd.node_update("node-1", { step: 0 }, { step: 1 }, { value: 1 }, { value: 1 }) in
+  let r = dd.determinism_report([a]) in
+  r.ok == true
+}
+
+test "determinism receipt deterministic" {
+  let a = dd.node_update("node-1", { step: 0 }, { step: 1 }, { value: 1 }, { value: 1 }) in
+  let x = dd.determinism_with_receipt([a]) in
+  let y = dd.determinism_with_receipt([a]) in
+  (x.receipt == y.receipt) && str.starts_with(x.receipt, "sha256:")
+}

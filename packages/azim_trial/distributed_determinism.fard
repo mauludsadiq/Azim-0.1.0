@@ -1,0 +1,71 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("dual_receipt") as dual
+
+fn node_update(node_id, input_state, output_state, math_contract, impl_contract) {
+  let receipts = dual.dual_receipt(
+    "node_update",
+    math_contract,
+    "distributed_node",
+    { node_id: node_id },
+    impl_contract
+  ) in
+  {
+    node_id: node_id,
+    input_state: input_state,
+    output_state: output_state,
+    math_receipt: receipts.math_receipt,
+    impl_receipt: receipts.impl_receipt
+  }
+}
+
+fn update_ok(update) {
+  (update.math_receipt != "") && (update.impl_receipt != "")
+}
+
+fn all_updates_ok(updates) {
+  list.all(updates, fn(u) { update_ok(u) })
+}
+
+fn merge_digest(updates) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.distributed_determinism.merge",
+    version: "phase6.1",
+    updates: updates
+  }))
+}
+
+fn determinism_report(updates) {
+  {
+    updates: updates,
+    update_count: list.len(updates),
+    updates_ok: all_updates_ok(updates),
+    merge_digest: merge_digest(updates),
+    ok: all_updates_ok(updates)
+  }
+}
+
+fn determinism_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.distributed_determinism",
+    version: "phase6.1",
+    report: report
+  }))
+}
+
+fn determinism_with_receipt(updates) {
+  let report = determinism_report(updates) in
+  let receipt = determinism_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  node_update,
+  update_ok,
+  all_updates_ok,
+  merge_digest,
+  determinism_report,
+  determinism_receipt,
+  determinism_with_receipt
+}
