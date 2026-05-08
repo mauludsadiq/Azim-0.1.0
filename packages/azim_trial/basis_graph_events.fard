@@ -1,0 +1,49 @@
+import("std/json") as json
+import("std/hash") as hash
+import("module_graph") as mg
+import("basis_expansion") as be
+
+fn expansion_node(event, event_receipt) {
+  mg.node(
+    "basis_expansion",
+    "azim_trial.basis_expansion",
+    ["cosine_similarity"],
+    ["basis_size"],
+    [event_receipt],
+    ["oracle_basis"]
+  )
+}
+
+fn sign_expansion_event(graph, step, current_size, cos_sim) {
+  let signed = be.expansion_with_receipt(step, current_size, cos_sim) in
+  let node = expansion_node(signed.event, signed.receipt) in
+  let next_graph = mg.append_node(graph, node) in
+  {
+    event: signed.event,
+    event_receipt: signed.receipt,
+    node: node,
+    graph: next_graph,
+    graph_digest: mg.graph_digest(next_graph)
+  }
+}
+
+fn signed_event_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.basis_graph_events",
+    version: "phase5.1",
+    output: output
+  }))
+}
+
+fn sign_expansion_event_with_receipt(graph, step, current_size, cos_sim) {
+  let output = sign_expansion_event(graph, step, current_size, cos_sim) in
+  let receipt = signed_event_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export {
+  expansion_node,
+  sign_expansion_event,
+  signed_event_receipt,
+  sign_expansion_event_with_receipt
+}

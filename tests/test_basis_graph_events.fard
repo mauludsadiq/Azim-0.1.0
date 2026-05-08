@@ -1,0 +1,36 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/module_graph") as mg
+import("../packages/azim_trial/basis_expansion") as be
+import("../packages/azim_trial/basis_graph_events") as bge
+
+test "basis expansion node returns record" {
+  let signed = be.expansion_with_receipt(1, 8, 0.3) in
+  type.of(bge.expansion_node(signed.event, signed.receipt)) == "record"
+}
+
+test "sign expansion event appends graph node" {
+  let g = mg.graph([]) in
+  let out = bge.sign_expansion_event(g, 1, 8, 0.3) in
+  list.len(out.graph.nodes) == 1
+}
+
+test "sign expansion event records trigger" {
+  let g = mg.graph([]) in
+  let out = bge.sign_expansion_event(g, 1, 8, 0.3) in
+  out.event.trigger == true
+}
+
+test "sign expansion event graph digest sha256" {
+  let g = mg.graph([]) in
+  let out = bge.sign_expansion_event(g, 1, 8, 0.3) in
+  str.starts_with(out.graph_digest, "sha256:")
+}
+
+test "sign expansion event receipt deterministic" {
+  let g = mg.graph([]) in
+  let a = bge.sign_expansion_event_with_receipt(g, 1, 8, 0.3) in
+  let b = bge.sign_expansion_event_with_receipt(g, 1, 8, 0.3) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
