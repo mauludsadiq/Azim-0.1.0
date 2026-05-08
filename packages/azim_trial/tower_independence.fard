@@ -1,0 +1,52 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("cross_tower") as ct
+
+fn zero_tensor_like(t) {
+  tensor.vector(list.repeat(0.0, list.len(t.data)))
+}
+
+fn zero_layer(out, layer_index) {
+  list.map(list.range(0, list.len(out.layers)), fn(i) {
+    let layer = list.get(out.layers, i) in
+    if i == layer_index then {
+      name: layer.name,
+      output: zero_tensor_like(layer.output),
+      zeroed: true
+    } else layer
+  })
+}
+
+fn l0_stable_after_zero(text, layer_index) {
+  let original = ct.tower(text) in
+  let zeroed_layers = zero_layer(original, layer_index) in
+  let original_l0 = list.get(original.layers, 0).output in
+  let zeroed_l0 = list.get(zeroed_layers, 0).output in
+  original_l0 == zeroed_l0
+}
+
+fn independence_report(text, layer_index) {
+  {
+    input_text: text,
+    zeroed_layer_index: layer_index,
+    l0_stable: l0_stable_after_zero(text, layer_index)
+  }
+}
+
+fn independence_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.tower_independence",
+    version: "phase1.2",
+    report: report
+  }))
+}
+
+fn independence_with_receipt(text, layer_index) {
+  let report = independence_report(text, layer_index) in
+  let receipt = independence_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export { zero_tensor_like, zero_layer, l0_stable_after_zero, independence_report, independence_receipt, independence_with_receipt }

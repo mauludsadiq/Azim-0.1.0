@@ -1,0 +1,31 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/cross_tower") as ct
+import("../packages/azim_trial/tower_independence") as indep
+
+test "zero tensor like returns tensor record" {
+  let out = ct.tower("sky is blue") in
+  let l0 = list.get(out.layers, 0).output in
+  type.of(indep.zero_tensor_like(l0)) == "record"
+}
+
+test "zero layer preserves layer count" {
+  let out = ct.tower("sky is blue") in
+  let zeroed = indep.zero_layer(out, 3) in
+  list.len(zeroed) == list.len(out.layers)
+}
+
+test "zero L3 keeps L0 stable" {
+  indep.l0_stable_after_zero("sky is blue", 3) == true
+}
+
+test "independence report returns record" {
+  type.of(indep.independence_report("sky is blue", 3)) == "record"
+}
+
+test "independence receipt deterministic" {
+  let a = indep.independence_with_receipt("sky is blue", 3) in
+  let b = indep.independence_with_receipt("sky is blue", 3) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
