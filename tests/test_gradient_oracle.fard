@@ -1,0 +1,43 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/gradient_oracle") as oracle
+
+test "basis direction returns tensor" {
+  type.of(oracle.basis_direction(4, 1)) == "record"
+}
+
+test "basis direction has requested dimension" {
+  let d = oracle.basis_direction(4, 1) in
+  list.len(d.data) == 4
+}
+
+test "oracle produces eight directions" {
+  let dirs = oracle.oracle_directions(4) in
+  list.len(dirs) == 8
+}
+
+test "directional derivative returns float" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let d = oracle.basis_direction(4, 0) in
+  type.of(oracle.directional_derivative(w, d, 0.001)) == "float"
+}
+
+test "oracle returns record" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  type.of(oracle.oracle(w, 0.001)) == "record"
+}
+
+test "oracle scores length is eight" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let out = oracle.oracle(w, 0.001) in
+  list.len(out.scores) == 8
+}
+
+test "oracle receipt deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let a = oracle.oracle_with_receipt(w, 0.001) in
+  let b = oracle.oracle_with_receipt(w, 0.001) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

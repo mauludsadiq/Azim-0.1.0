@@ -1,0 +1,58 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("finite_difference_gradient") as fdg
+
+fn basis_direction(dim, index) {
+  tensor.vector(list.build(dim, fn(i) {
+    if i == index then 1.0 else 0.0
+  }))
+}
+
+fn oracle_directions(dim) {
+  list.build(8, fn(i) {
+    basis_direction(dim, i % dim)
+  })
+}
+
+fn directional_derivative(weight_tensor, direction, epsilon) {
+  let grad = fdg.finite_gradient(weight_tensor, epsilon) in
+  tensor.dot(grad, direction)
+}
+
+fn oracle(weight_tensor, epsilon) {
+  let dim = list.len(weight_tensor.data) in
+  let dirs = oracle_directions(dim) in
+  let scores = list.map(dirs, fn(d) {
+    directional_derivative(weight_tensor, d, epsilon)
+  }) in
+  {
+    dimension: dim,
+    directions: dirs,
+    scores: scores
+  }
+}
+
+fn oracle_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.gradient_oracle",
+    version: "phase3.0",
+    output: output
+  }))
+}
+
+fn oracle_with_receipt(weight_tensor, epsilon) {
+  let output = oracle(weight_tensor, epsilon) in
+  let receipt = oracle_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export {
+  basis_direction,
+  oracle_directions,
+  directional_derivative,
+  oracle,
+  oracle_receipt,
+  oracle_with_receipt
+}
