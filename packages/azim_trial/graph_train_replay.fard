@@ -1,0 +1,47 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("graph_train_step") as gtrain
+
+fn run_one(state, example, lr) {
+  let stepped = gtrain.graph_train_step_with_receipt(
+    state.registry,
+    state.graph,
+    example.parameter_id,
+    example.text,
+    example.label,
+    lr
+  ) in
+  {
+    registry: stepped.result.registry,
+    graph: stepped.result.graph,
+    events: list.append(state.events, {
+      parameter_id: example.parameter_id,
+      text: example.text,
+      label: example.label,
+      ok: stepped.result.ok,
+      graph_train_receipt: stepped.receipt
+    })
+  }
+}
+
+fn replay(examples, initial_registry, initial_graph, lr) {
+  let init = { registry: initial_registry, graph: initial_graph, events: [] } in
+  list.fold(examples, init, fn(state, example) { run_one(state, example, lr) })
+}
+
+fn replay_receipt(result) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.graph_train_replay",
+    version: "2.7.0",
+    result: result
+  }))
+}
+
+fn replay_with_receipt(examples, initial_registry, initial_graph, lr) {
+  let result = replay(examples, initial_registry, initial_graph, lr) in
+  let receipt = replay_receipt(result) in
+  { result: result, receipt: receipt }
+}
+
+export { run_one, replay, replay_receipt, replay_with_receipt }
