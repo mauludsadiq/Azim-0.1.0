@@ -1,0 +1,63 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/rssm") as rssm
+import("../packages/azim_trial/distributed_scan") as ds
+
+test "partition returns two chunks" {
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  list.len(ds.partition(xs, 2)) == 2
+}
+
+test "node scan returns tensor" {
+  let s = rssm.init_state(3) in
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  type.of(ds.node_scan(xs, s)) == "record"
+}
+
+test "distributed scan returns record" {
+  let s = rssm.init_state(3) in
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  type.of(ds.distributed_scan(xs, s, 2)) == "record"
+}
+
+test "distributed scan equivalent true" {
+  let s = rssm.init_state(3) in
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  let out = ds.distributed_scan(xs, s, 2) in
+  out.equivalent == true
+}
+
+test "distributed scan node count recorded" {
+  let s = rssm.init_state(3) in
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  let out = ds.distributed_scan(xs, s, 2) in
+  out.node_count == 2
+}
+
+test "distributed scan receipt deterministic" {
+  let s = rssm.init_state(3) in
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  let a = ds.distributed_scan_with_receipt(xs, s, 2) in
+  let b = ds.distributed_scan_with_receipt(xs, s, 2) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

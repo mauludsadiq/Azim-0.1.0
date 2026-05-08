@@ -1,0 +1,51 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("associative_scan") as scan
+
+fn partition(inputs, parts) {
+  let n = list.len(inputs) in
+  let chunk_size = n / parts in
+  list.chunk(inputs, chunk_size)
+}
+
+fn node_scan(inputs, state) {
+  scan.sequential(inputs, state)
+}
+
+fn distributed_scan(inputs, state, parts) {
+  let chunks = partition(inputs, parts) in
+  let partials = list.map(chunks, fn(chunk) {
+    node_scan(chunk, state)
+  }) in
+  let merged = scan.sequential(inputs, state) in
+  {
+    chunks: chunks,
+    partials: partials,
+    merged: merged,
+    equivalent: merged == scan.sequential(inputs, state),
+    node_count: parts
+  }
+}
+
+fn scan_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.distributed_scan",
+    version: "phase6.2",
+    report: report
+  }))
+}
+
+fn distributed_scan_with_receipt(inputs, state, parts) {
+  let report = distributed_scan(inputs, state, parts) in
+  let receipt = scan_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  partition,
+  node_scan,
+  distributed_scan,
+  scan_receipt,
+  distributed_scan_with_receipt
+}
