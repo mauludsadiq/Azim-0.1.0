@@ -1,0 +1,64 @@
+import("std/json") as json
+import("std/hash") as hash
+import("scale_manifest") as scale
+import("structural_allocation") as alloc
+
+fn medium_config(name, total_params, steps, oracle_kind, variance_monitoring) {
+  let allocation = alloc.default_allocation(total_params) in
+  {
+    name: name,
+    total_params: total_params,
+    steps: steps,
+    oracle_kind: oracle_kind,
+    variance_monitoring: variance_monitoring,
+    allocation: allocation,
+    allocation_ok: alloc.allocation_ok(allocation)
+  }
+}
+
+fn medium_100m() {
+  medium_config("aware_tower_medium_100m", 100000000.0, 1000.0, "hybrid_oracle", true)
+}
+
+fn medium_250m() {
+  medium_config("aware_tower_medium_250m", 250000000.0, 1000.0, "hybrid_oracle", true)
+}
+
+fn medium_500m() {
+  medium_config("aware_tower_medium_500m", 500000000.0, 1000.0, "hybrid_oracle", true)
+}
+
+fn training_report(config) {
+  {
+    config: config,
+    phase: "phase3.medium_training",
+    oracle_ok: config.oracle_kind == "hybrid_oracle",
+    variance_ok: config.variance_monitoring == true,
+    allocation_ok: config.allocation_ok,
+    ok: (config.oracle_kind == "hybrid_oracle") && (config.variance_monitoring == true) && config.allocation_ok
+  }
+}
+
+fn training_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.medium_training_manifest",
+    version: "phase3.3",
+    report: report
+  }))
+}
+
+fn training_with_receipt(config) {
+  let report = training_report(config) in
+  let receipt = training_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  medium_config,
+  medium_100m,
+  medium_250m,
+  medium_500m,
+  training_report,
+  training_receipt,
+  training_with_receipt
+}

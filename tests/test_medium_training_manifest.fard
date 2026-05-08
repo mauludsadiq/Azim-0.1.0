@@ -1,0 +1,33 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/medium_training_manifest") as mtm
+
+test "medium 100m returns record" {
+  type.of(mtm.medium_100m()) == "record"
+}
+
+test "medium 100m has 100m params" {
+  let c = mtm.medium_100m() in
+  c.total_params == 100000000.0
+}
+
+test "medium 500m has 500m params" {
+  let c = mtm.medium_500m() in
+  c.total_params == 500000000.0
+}
+
+test "medium training report ok" {
+  let r = mtm.training_report(mtm.medium_250m()) in
+  r.ok == true
+}
+
+test "medium training uses hybrid oracle" {
+  let r = mtm.training_report(mtm.medium_250m()) in
+  r.oracle_ok == true
+}
+
+test "medium training receipt deterministic" {
+  let a = mtm.training_with_receipt(mtm.medium_250m()) in
+  let b = mtm.training_with_receipt(mtm.medium_250m()) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
