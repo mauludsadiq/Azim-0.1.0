@@ -1,0 +1,41 @@
+import("std/json") as json
+import("std/hash") as hash
+import("corpus") as corpus
+import("parameter_registry") as preg
+import("module_graph") as mg
+import("training_run") as run
+
+fn manifest(corpus_obj, initial_registry, initial_graph, training_output, run_receipt) {
+  {
+    version: "3.1.0",
+    corpus_digest: corpus.corpus_digest(corpus_obj),
+    initial_registry_digest: preg.registry_digest(initial_registry),
+    initial_graph_digest: mg.graph_digest(initial_graph),
+    final_registry_digest: preg.registry_digest(training_output.registry),
+    final_graph_digest: mg.graph_digest(training_output.graph),
+    run_receipt: run_receipt,
+    ok: training_output.ok
+  }
+}
+
+fn manifest_digest(m) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.training_manifest",
+    version: "3.1.0",
+    manifest: m
+  }))
+}
+
+fn build_with_receipt(corpus_obj, initial_registry, initial_graph, parameter_id, lr) {
+  let executed = run.run_with_receipt(corpus_obj, initial_registry, initial_graph, parameter_id, lr) in
+  let m = manifest(corpus_obj, initial_registry, initial_graph, executed.output, executed.receipt) in
+  let digest = manifest_digest(m) in
+  {
+    training: executed.output,
+    training_receipt: executed.receipt,
+    manifest: m,
+    manifest_digest: digest
+  }
+}
+
+export { manifest, manifest_digest, build_with_receipt }
