@@ -1,0 +1,36 @@
+import("std/json") as json
+import("std/hash") as hash
+import("parameter_registry") as preg
+import("module_graph") as mg
+import("graph_train_replay") as replay
+import("replay_verifier") as verify
+
+fn run(corpus_obj, registry, graph, parameter_id, lr) {
+  let result = replay.replay(corpus_obj.examples, registry, graph, lr) in
+  let updated_param = preg.get_param(result.registry, parameter_id) in
+  let verification = verify.verify_replay(result, updated_param) in
+  {
+    corpus: corpus_obj,
+    registry: result.registry,
+    graph: result.graph,
+    events: result.events,
+    verification: verification,
+    ok: verification.ok
+  }
+}
+
+fn run_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.training_run",
+    version: "3.0.0",
+    output: output
+  }))
+}
+
+fn run_with_receipt(corpus_obj, registry, graph, parameter_id, lr) {
+  let output = run(corpus_obj, registry, graph, parameter_id, lr) in
+  let receipt = run_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export { run, run_receipt, run_with_receipt }
