@@ -1,0 +1,36 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/integration_1gb") as integ
+
+test "integration config returns record" {
+  type.of(integ.integration_config(1000000000.0, 1000)) == "record"
+}
+
+test "integration config records 1gb corpus" {
+  let c = integ.integration_config(1000000000.0, 1000) in
+  c.corpus_size_bytes == 1000000000.0
+}
+
+test "integration run returns record" {
+  let c = integ.integration_config(1000000000.0, 1000) in
+  type.of(integ.integration_run(c)) == "record"
+}
+
+test "integration run no deadlock" {
+  let c = integ.integration_config(1000000000.0, 1000) in
+  let r = integ.integration_run(c) in
+  r.no_deadlock == true
+}
+
+test "integration run ok" {
+  let c = integ.integration_config(1000000000.0, 1000) in
+  let r = integ.integration_run(c) in
+  r.ok == true
+}
+
+test "integration receipt deterministic" {
+  let c = integ.integration_config(1000000000.0, 1000) in
+  let a = integ.integration_with_receipt(c) in
+  let b = integ.integration_with_receipt(c) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

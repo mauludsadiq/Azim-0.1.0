@@ -1,0 +1,64 @@
+import("std/json") as json
+import("std/hash") as hash
+import("cluster_run_1p5b") as cluster
+import("async_validator") as av
+import("backpressure_protocol") as bp
+import("forensic_sidechain") as fs
+import("validator_thresholds") as vt
+
+fn integration_config(corpus_size_bytes, step_count) {
+  {
+    name: "azim_1gb_integration",
+    corpus_size_bytes: corpus_size_bytes,
+    step_count: step_count,
+    tiled_matmul: true,
+    dual_receipt: true,
+    associative_scan: true,
+    hybrid_oracle: true,
+    basis_expansion: true,
+    state_pack_cdn: true,
+    async_validator: true
+  }
+}
+
+fn integration_run(config) {
+  let cluster_report = cluster.cluster_training_run() in
+  let validator_config = av.validator_config("cdn_validator", 1000, true, true) in
+  let validator_report = av.validator_run(validator_config) in
+  let thresholds = vt.thresholds(0.5, 0.8) in
+  let backpressure = bp.backpressure_with_receipt("sha256:probe", 0.2, thresholds) in
+  let main_chain = [fs.main_chain_entry(1, "sha256:math")] in
+  let sidechain = [fs.sidechain_event(1, "sha256:impl", "sha256:probe", "ok")] in
+  let forensic = fs.forensic_report(main_chain, sidechain) in
+
+  {
+    config: config,
+    cluster: cluster_report,
+    validator: validator_report,
+    backpressure: backpressure.report,
+    forensic: forensic,
+    no_deadlock: cluster_report.ok && validator_report.ok && backpressure.report.may_commit_next_step,
+    ok: cluster_report.ok && validator_report.ok && backpressure.report.may_commit_next_step && forensic.ok
+  }
+}
+
+fn integration_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.integration_1gb",
+    version: "phase7.4",
+    report: report
+  }))
+}
+
+fn integration_with_receipt(config) {
+  let report = integration_run(config) in
+  let receipt = integration_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  integration_config,
+  integration_run,
+  integration_receipt,
+  integration_with_receipt
+}
