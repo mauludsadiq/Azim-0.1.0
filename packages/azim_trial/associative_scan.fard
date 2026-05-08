@@ -1,0 +1,39 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("rssm") as rssm
+
+fn segment(inputs, initial_state) {
+  rssm.run_trace(inputs, initial_state)
+}
+
+fn sequential(inputs, initial_state) {
+  rssm.run(inputs, initial_state)
+}
+
+fn scan_equivalent(inputs, initial_state) {
+  let seq = sequential(inputs, initial_state) in
+  let seg = segment(inputs, initial_state) in
+  {
+    sequential_state: seq,
+    scan_state: seg.state,
+    equivalent: seq == seg.state,
+    step_count: list.len(seg.steps)
+  }
+}
+
+fn scan_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.associative_scan",
+    version: "phase2.2",
+    report: report
+  }))
+}
+
+fn scan_with_receipt(inputs, initial_state) {
+  let report = scan_equivalent(inputs, initial_state) in
+  let receipt = scan_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export { segment, sequential, scan_equivalent, scan_receipt, scan_with_receipt }
