@@ -1,0 +1,69 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("structural_allocation") as alloc
+
+fn node_config(node_id, role, params) {
+  {
+    node_id: node_id,
+    role: role,
+    params: params
+  }
+}
+
+fn cluster_config(name, total_params, nodes) {
+  let allocation = alloc.default_allocation(total_params) in
+  {
+    name: name,
+    total_params: total_params,
+    nodes: nodes,
+    node_count: list.len(nodes),
+    allocation: allocation,
+    allocation_ok: alloc.allocation_ok(allocation)
+  }
+}
+
+fn starter_cluster() {
+  cluster_config(
+    "azim_cluster_1p5b",
+    1500000000.0,
+    [
+      node_config("node-1", "rssm", 600000000.0),
+      node_config("node-2", "rssm", 600000000.0),
+      node_config("node-3", "tower", 300000000.0)
+    ]
+  )
+}
+
+fn cluster_report(config) {
+  {
+    config: config,
+    distributed: true,
+    state_pack_enabled: true,
+    allocation_ok: config.allocation_ok,
+    ok: config.allocation_ok
+  }
+}
+
+fn cluster_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.state_pack_cluster",
+    version: "phase6.0",
+    report: report
+  }))
+}
+
+fn cluster_with_receipt(config) {
+  let report = cluster_report(config) in
+  let receipt = cluster_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  node_config,
+  cluster_config,
+  starter_cluster,
+  cluster_report,
+  cluster_receipt,
+  cluster_with_receipt
+}

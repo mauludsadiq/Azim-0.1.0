@@ -1,0 +1,32 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/state_pack_cluster") as spc
+
+test "node config returns record" {
+  type.of(spc.node_config("node-1", "rssm", 600000000.0)) == "record"
+}
+
+test "starter cluster returns record" {
+  type.of(spc.starter_cluster()) == "record"
+}
+
+test "starter cluster has three nodes" {
+  let c = spc.starter_cluster() in
+  c.node_count == 3
+}
+
+test "starter cluster has 1p5b params" {
+  let c = spc.starter_cluster() in
+  c.total_params == 1500000000.0
+}
+
+test "cluster report ok" {
+  let r = spc.cluster_report(spc.starter_cluster()) in
+  r.ok == true
+}
+
+test "cluster receipt deterministic" {
+  let a = spc.cluster_with_receipt(spc.starter_cluster()) in
+  let b = spc.cluster_with_receipt(spc.starter_cluster()) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
