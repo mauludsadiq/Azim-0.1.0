@@ -1,0 +1,63 @@
+import("std/json") as json
+import("std/hash") as hash
+import("structural_allocation") as alloc
+
+fn large_config(name, total_params, tile_size, dual_receipts, cross_hardware_verification) {
+  let allocation = alloc.default_allocation(total_params) in
+  {
+    name: name,
+    total_params: total_params,
+    tile_size: tile_size,
+    dual_receipts: dual_receipts,
+    cross_hardware_verification: cross_hardware_verification,
+    allocation: allocation,
+    allocation_ok: alloc.allocation_ok(allocation)
+  }
+}
+
+fn large_500m() {
+  large_config("aware_tower_large_500m", 500000000.0, 64.0, true, true)
+}
+
+fn large_750m() {
+  large_config("aware_tower_large_750m", 750000000.0, 64.0, true, true)
+}
+
+fn large_1b() {
+  large_config("aware_tower_large_1b", 1000000000.0, 64.0, true, true)
+}
+
+fn training_report(config) {
+  {
+    config: config,
+    phase: "phase4.large_training",
+    dual_receipts_ok: config.dual_receipts == true,
+    cross_hardware_ok: config.cross_hardware_verification == true,
+    allocation_ok: config.allocation_ok,
+    ok: (config.dual_receipts == true) && (config.cross_hardware_verification == true) && config.allocation_ok
+  }
+}
+
+fn training_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.large_training_manifest",
+    version: "phase4.3",
+    report: report
+  }))
+}
+
+fn training_with_receipt(config) {
+  let report = training_report(config) in
+  let receipt = training_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  large_config,
+  large_500m,
+  large_750m,
+  large_1b,
+  training_report,
+  training_receipt,
+  training_with_receipt
+}

@@ -1,0 +1,38 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/large_training_manifest") as ltm
+
+test "large 500m returns record" {
+  type.of(ltm.large_500m()) == "record"
+}
+
+test "large 500m has 500m params" {
+  let c = ltm.large_500m() in
+  c.total_params == 500000000.0
+}
+
+test "large 1b has 1b params" {
+  let c = ltm.large_1b() in
+  c.total_params == 1000000000.0
+}
+
+test "large training report ok" {
+  let r = ltm.training_report(ltm.large_750m()) in
+  r.ok == true
+}
+
+test "large training uses dual receipts" {
+  let r = ltm.training_report(ltm.large_750m()) in
+  r.dual_receipts_ok == true
+}
+
+test "large training uses cross hardware verification" {
+  let r = ltm.training_report(ltm.large_750m()) in
+  r.cross_hardware_ok == true
+}
+
+test "large training receipt deterministic" {
+  let a = ltm.training_with_receipt(ltm.large_750m()) in
+  let b = ltm.training_with_receipt(ltm.large_750m()) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
