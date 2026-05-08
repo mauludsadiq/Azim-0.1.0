@@ -1,0 +1,33 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/scale_manifest") as scale
+
+test "small scale returns record" {
+  type.of(scale.small_10m()) == "record"
+}
+
+test "small scale has 10m params" {
+  let s = scale.small_10m() in
+  s.total_params == 10000000.0
+}
+
+test "medium scale has 50m params" {
+  let s = scale.medium_50m() in
+  s.total_params == 50000000.0
+}
+
+test "large scale has 100m params" {
+  let s = scale.large_100m() in
+  s.total_params == 100000000.0
+}
+
+test "scale report allocation ok" {
+  let r = scale.scale_report(scale.small_10m()) in
+  r.allocation_ok == true
+}
+
+test "scale receipt deterministic" {
+  let a = scale.scale_with_receipt(scale.small_10m()) in
+  let b = scale.scale_with_receipt(scale.small_10m()) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

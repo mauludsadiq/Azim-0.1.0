@@ -1,0 +1,80 @@
+import("std/json") as json
+import("std/hash") as hash
+import("structural_allocation") as alloc
+
+fn model_scale(name, total_params, d_model, n_layers, rssm_enabled, tower_enabled) {
+  {
+    name: name,
+    total_params: total_params,
+    d_model: d_model,
+    n_layers: n_layers,
+    rssm_enabled: rssm_enabled,
+    tower_enabled: tower_enabled
+  }
+}
+
+fn small_10m() {
+  model_scale(
+    "aware_tower_small_10m",
+    10000000.0,
+    512.0,
+    12.0,
+    true,
+    true
+  )
+}
+
+fn medium_50m() {
+  model_scale(
+    "aware_tower_medium_50m",
+    50000000.0,
+    1024.0,
+    24.0,
+    true,
+    true
+  )
+}
+
+fn large_100m() {
+  model_scale(
+    "aware_tower_large_100m",
+    100000000.0,
+    2048.0,
+    32.0,
+    true,
+    true
+  )
+}
+
+fn scale_report(scale_obj) {
+  let allocation = alloc.default_allocation(scale_obj.total_params) in
+  {
+    scale: scale_obj,
+    allocation: allocation,
+    allocation_ok: alloc.allocation_ok(allocation)
+  }
+}
+
+fn scale_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.scale_manifest",
+    version: "phase2.scale",
+    report: report
+  }))
+}
+
+fn scale_with_receipt(scale_obj) {
+  let report = scale_report(scale_obj) in
+  let receipt = scale_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  model_scale,
+  small_10m,
+  medium_50m,
+  large_100m,
+  scale_report,
+  scale_receipt,
+  scale_with_receipt
+}
