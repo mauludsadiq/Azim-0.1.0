@@ -1,0 +1,39 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/finite_difference_gradient") as fdg
+
+test "perturb at returns tensor record" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(fdg.perturb_at(w, 1, 0.1)) == "record"
+}
+
+test "perturb at preserves length" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let out = fdg.perturb_at(w, 1, 0.1) in
+  list.len(out.data) == list.len(w.data)
+}
+
+test "directional loss proxy returns float" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(fdg.directional_loss_proxy(w)) == "float"
+}
+
+test "gradient component returns float" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(fdg.gradient_component(w, 0, 0.001)) == "float"
+}
+
+test "finite gradient preserves length" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let g = fdg.finite_gradient(w, 0.001) in
+  list.len(g.data) == list.len(w.data)
+}
+
+test "finite gradient receipt deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0]) in
+  let a = fdg.finite_gradient_with_receipt(w, 0.001) in
+  let b = fdg.finite_gradient_with_receipt(w, 0.001) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

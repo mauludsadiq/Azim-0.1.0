@@ -1,0 +1,44 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+
+fn perturb_at(weight_tensor, index, delta) {
+  tensor.vector(list.build(list.len(weight_tensor.data), fn(i) {
+    if i == index then list.get(weight_tensor.data, i) + delta else list.get(weight_tensor.data, i)
+  }))
+}
+
+fn directional_loss_proxy(weight_tensor) {
+  list.fold(weight_tensor.data, 0.0, fn(acc, x) { acc + x * x })
+}
+
+fn gradient_component(weight_tensor, index, epsilon) {
+  let plus = perturb_at(weight_tensor, index, epsilon) in
+  let minus = perturb_at(weight_tensor, index, 0.0 - epsilon) in
+  (directional_loss_proxy(plus) - directional_loss_proxy(minus)) / (2.0 * epsilon)
+}
+
+fn finite_gradient(weight_tensor, epsilon) {
+  tensor.vector(list.build(list.len(weight_tensor.data), fn(i) {
+    gradient_component(weight_tensor, i, epsilon)
+  }))
+}
+
+fn finite_gradient_receipt(weight_tensor, epsilon, gradient) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.finite_difference_gradient",
+    version: "3.2.0",
+    weight: weight_tensor,
+    epsilon: epsilon,
+    gradient: gradient
+  }))
+}
+
+fn finite_gradient_with_receipt(weight_tensor, epsilon) {
+  let gradient = finite_gradient(weight_tensor, epsilon) in
+  let receipt = finite_gradient_receipt(weight_tensor, epsilon, gradient) in
+  { gradient: gradient, receipt: receipt }
+}
+
+export { perturb_at, directional_loss_proxy, gradient_component, finite_gradient, finite_gradient_receipt, finite_gradient_with_receipt }
