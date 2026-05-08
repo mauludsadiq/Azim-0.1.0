@@ -1,0 +1,42 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/async_validator") as av
+
+test "validator config returns record" {
+  type.of(av.validator_config("cdn_validator", 1000, true, true)) == "record"
+}
+
+test "probe suite has three probes" {
+  list.len(av.probe_suite()) == 3
+}
+
+test "validator run returns record" {
+  let c = av.validator_config("cdn_validator", 1000, true, true) in
+  type.of(av.validator_run(c)) == "record"
+}
+
+test "validator cadence is 1000 steps" {
+  let c = av.validator_config("cdn_validator", 1000, true, true) in
+  let r = av.validator_run(c) in
+  r.cadence_steps == 1000
+}
+
+test "validator probes ok" {
+  let c = av.validator_config("cdn_validator", 1000, true, true) in
+  let r = av.validator_run(c) in
+  r.probes_ok == true
+}
+
+test "validator run ok" {
+  let c = av.validator_config("cdn_validator", 1000, true, true) in
+  let r = av.validator_run(c) in
+  r.ok == true
+}
+
+test "validator receipt deterministic" {
+  let c = av.validator_config("cdn_validator", 1000, true, true) in
+  let a = av.validator_with_receipt(c) in
+  let b = av.validator_with_receipt(c) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

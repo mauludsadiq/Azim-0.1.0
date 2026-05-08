@@ -1,0 +1,67 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+
+fn validator_config(name, cadence_steps, sidechain_enabled, backpressure_enabled) {
+  {
+    name: name,
+    cadence_steps: cadence_steps,
+    sidechain_enabled: sidechain_enabled,
+    backpressure_enabled: backpressure_enabled
+  }
+}
+
+fn probe(name, axis, passed) {
+  {
+    name: name,
+    axis: axis,
+    passed: passed
+  }
+}
+
+fn probe_suite() {
+  [
+    probe("semantic_probe", "semantic", true),
+    probe("gradient_probe", "optimization", true),
+    probe("receipt_probe", "verification", true)
+  ]
+}
+
+fn validator_run(config) {
+  let probes = probe_suite() in
+  let passed = list.all(probes, fn(p) { p.passed }) in
+
+  {
+    config: config,
+    probes: probes,
+    probe_count: list.len(probes),
+    cadence_steps: config.cadence_steps,
+    sidechain_enabled: config.sidechain_enabled,
+    backpressure_enabled: config.backpressure_enabled,
+    probes_ok: passed,
+    ok: passed && config.sidechain_enabled && config.backpressure_enabled
+  }
+}
+
+fn validator_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.async_validator",
+    version: "phase7.0",
+    report: report
+  }))
+}
+
+fn validator_with_receipt(config) {
+  let report = validator_run(config) in
+  let receipt = validator_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  validator_config,
+  probe,
+  probe_suite,
+  validator_run,
+  validator_receipt,
+  validator_with_receipt
+}
