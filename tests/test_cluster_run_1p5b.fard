@@ -1,0 +1,43 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/cluster_run_1p5b") as cr
+
+test "cluster training batch has three items" {
+  list.len(cr.training_batch()) == 3
+}
+
+test "cluster training run returns record" {
+  type.of(cr.cluster_training_run()) == "record"
+}
+
+test "cluster training run has 1p5b params" {
+  let r = cr.cluster_training_run() in
+  r.total_params == 1500000000.0
+}
+
+test "cluster training run has three nodes" {
+  let r = cr.cluster_training_run() in
+  r.node_count == 3
+}
+
+test "cluster training scan equivalent" {
+  let r = cr.cluster_training_run() in
+  r.equivalent_scan == true
+}
+
+test "cluster training deterministic updates" {
+  let r = cr.cluster_training_run() in
+  r.deterministic_updates == true
+}
+
+test "cluster training run ok" {
+  let r = cr.cluster_training_run() in
+  r.ok == true
+}
+
+test "cluster training receipt deterministic" {
+  let a = cr.cluster_run_with_receipt() in
+  let b = cr.cluster_run_with_receipt() in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
