@@ -1,0 +1,31 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/dual_receipt") as dual
+
+test "math receipt has sha256 prefix" {
+  str.starts_with(dual.math_receipt("matmul", { output: "tensor" }), "sha256:")
+}
+
+test "impl receipt has sha256 prefix" {
+  str.starts_with(dual.impl_receipt("matmul", "tile64", "cpu", { output: "tensor" }), "sha256:")
+}
+
+test "dual receipt returns record" {
+  type.of(dual.dual_receipt("matmul", { output: "tensor" }, "tile64", "cpu", { output: "tensor" })) == "record"
+}
+
+test "dual receipts differ" {
+  let d = dual.dual_receipt("matmul", { output: "tensor" }, "tile64", "cpu", { output: "tensor" }) in
+  d.math_receipt != d.impl_receipt
+}
+
+test "dual report ok true" {
+  let r = dual.dual_report("matmul", { output: "tensor" }, "tile64", "cpu", { output: "tensor" }) in
+  r.ok == true
+}
+
+test "dual report receipt deterministic" {
+  let a = dual.report_with_receipt("matmul", { output: "tensor" }, "tile64", "cpu", { output: "tensor" }) in
+  let b = dual.report_with_receipt("matmul", { output: "tensor" }, "tile64", "cpu", { output: "tensor" }) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

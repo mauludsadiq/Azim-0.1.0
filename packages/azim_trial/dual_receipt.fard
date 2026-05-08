@@ -1,0 +1,68 @@
+import("std/json") as json
+import("std/hash") as hash
+
+fn math_receipt(operation, canonical_math) {
+  hash.sha256_text(json.canonicalize({
+    layer: "math",
+    operation: operation,
+    canonical_math: canonical_math
+  }))
+}
+
+fn impl_receipt(operation, implementation, runtime, output) {
+  hash.sha256_text(json.canonicalize({
+    layer: "impl",
+    operation: operation,
+    implementation: implementation,
+    runtime: runtime,
+    output: output
+  }))
+}
+
+fn dual_receipt(operation, canonical_math, implementation, runtime, output) {
+  let math = math_receipt(operation, canonical_math) in
+  let impl = impl_receipt(operation, implementation, runtime, output) in
+  {
+    operation: operation,
+    math_receipt: math,
+    impl_receipt: impl
+  }
+}
+
+fn dual_ok(receipt_obj) {
+  (receipt_obj.math_receipt != "") &&
+  (receipt_obj.impl_receipt != "") &&
+  (receipt_obj.math_receipt != receipt_obj.impl_receipt)
+}
+
+fn dual_report(operation, canonical_math, implementation, runtime, output) {
+  let d = dual_receipt(operation, canonical_math, implementation, runtime, output) in
+  {
+    dual: d,
+    ok: dual_ok(d)
+  }
+}
+
+fn report_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.dual_receipt",
+    version: "phase4.0",
+    report: report
+  }))
+}
+
+fn report_with_receipt(operation, canonical_math, implementation, runtime, output) {
+  let report = dual_report(operation, canonical_math, implementation, runtime, output) in
+  let receipt = report_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  math_receipt,
+  impl_receipt,
+  dual_receipt,
+  dual_ok,
+  dual_report,
+  report_receipt,
+  report_with_receipt
+}
