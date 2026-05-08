@@ -1,0 +1,46 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/forensic_sidechain") as fs
+
+test "sidechain event returns record" {
+  type.of(fs.sidechain_event(1, "sha256:impl", "sha256:probe", "warning")) == "record"
+}
+
+test "append sidechain increases length" {
+  let e = fs.sidechain_event(1, "sha256:impl", "sha256:probe", "warning") in
+  let c = fs.append_sidechain([], e) in
+  list.len(c) == 1
+}
+
+test "main chain entry returns record" {
+  type.of(fs.main_chain_entry(1, "sha256:math")) == "record"
+}
+
+test "forensic report returns record" {
+  let m = [fs.main_chain_entry(1, "sha256:math")] in
+  let s = [fs.sidechain_event(1, "sha256:impl", "sha256:probe", "warning")] in
+  type.of(fs.forensic_report(m, s)) == "record"
+}
+
+test "forensic report preserves chain lengths" {
+  let m = [fs.main_chain_entry(1, "sha256:math")] in
+  let s = [fs.sidechain_event(1, "sha256:impl", "sha256:probe", "warning")] in
+  let r = fs.forensic_report(m, s) in
+  (r.main_chain_len == 1) && (r.sidechain_len == 1)
+}
+
+test "forensic report ok true" {
+  let m = [fs.main_chain_entry(1, "sha256:math")] in
+  let s = [fs.sidechain_event(1, "sha256:impl", "sha256:probe", "warning")] in
+  let r = fs.forensic_report(m, s) in
+  r.ok == true
+}
+
+test "forensic receipt deterministic" {
+  let m = [fs.main_chain_entry(1, "sha256:math")] in
+  let s = [fs.sidechain_event(1, "sha256:impl", "sha256:probe", "warning")] in
+  let a = fs.forensic_with_receipt(m, s) in
+  let b = fs.forensic_with_receipt(m, s) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

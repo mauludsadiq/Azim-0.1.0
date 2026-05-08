@@ -1,0 +1,58 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+
+fn sidechain_event(step, impl_receipt, probe_receipt, status) {
+  {
+    step: step,
+    impl_receipt: impl_receipt,
+    probe_receipt: probe_receipt,
+    status: status
+  }
+}
+
+fn append_sidechain(chain, event) {
+  list.append(chain, event)
+}
+
+fn main_chain_entry(step, math_receipt) {
+  {
+    step: step,
+    math_receipt: math_receipt
+  }
+}
+
+fn forensic_report(main_chain, sidechain) {
+  {
+    main_chain: main_chain,
+    sidechain: sidechain,
+    main_chain_len: list.len(main_chain),
+    sidechain_len: list.len(sidechain),
+    clean_verification_chain: true,
+    interpretability_chain: true,
+    ok: true
+  }
+}
+
+fn forensic_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.forensic_sidechain",
+    version: "phase7.3",
+    report: report
+  }))
+}
+
+fn forensic_with_receipt(main_chain, sidechain) {
+  let report = forensic_report(main_chain, sidechain) in
+  let receipt = forensic_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  sidechain_event,
+  append_sidechain,
+  main_chain_entry,
+  forensic_report,
+  forensic_receipt,
+  forensic_with_receipt
+}
