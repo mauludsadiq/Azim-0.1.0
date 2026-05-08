@@ -1,37 +1,53 @@
 # Azim v0.1.0
 
-Azim is a deterministic experimental architecture implemented in FARD.
+Azim is a deterministic AI architecture implemented in FARD.
 
-It separates:
+The system separates:
 
-- linguistic competence
 - world-state memory
-- realization lawfulness
-- replay-verifiable execution
+- linguistic realization
+- recurrent state evolution
+- lawful surface generation
+- deterministic optimization
 
-into independently testable subsystems.
+into independently verifiable subsystems.
 
-Every major subsystem emits deterministic SHA-256 receipts.
+Every subsystem emits deterministic SHA-256 receipts.
 
-The system is designed around four principles:
+Azim is not a monolithic transformer.
 
-1. deterministic execution
-2. causal architectural separation
-3. replay-verifiable training/inference
-4. lawful realization constraints
+It is a structurally separated architecture built around deterministic execution, replay verification, and causal isolation.
 
 ---
 
-# Architecture
+# Core Design
 
-Azim is composed of two primary systems:
+Azim consists of two primary computational systems:
 
-| System | Role |
+| System | Responsibility |
 |---|---|
-| RSSM | world-state memory and latent recurrence |
-| Aware-Tower | linguistic competence and realization |
+| RSSM | world-state memory |
+| Aware-Tower | linguistic competence |
 
-The systems communicate through a constrained bridge.
+The systems communicate through a constrained deterministic bridge.
+
+---
+
+# Deterministic Execution
+
+All major computations produce replay-verifiable receipts.
+
+Core invariant:
+
+text id="c1jk7w" same inputs -> same outputs -> same receipts 
+
+Receipts commit to:
+
+- inputs
+- outputs
+- configuration
+- execution structure
+- subsystem state
 
 ---
 
@@ -43,54 +59,57 @@ Implemented:
 - tensor algebra
 - embedding
 - attention
-- transformer block
+- transformer blocks
 - logits
 - generation
 - semantic validation
-- receipt generation
+- replay receipts
 
-Core property:
+Subsystems:
 
-text same inputs -> same outputs -> same receipts 
+text id="yxqz4v" tokenizer tensor embedding attention block logits generation semantic validator 
 
 ---
 
 # Phase 1 — Aware-Tower
 
+The Aware-Tower separates linguistic structure into hierarchical layers.
+
+Hierarchy:
+
+text id="8ht5ql" L0 phoneme L1 morpheme L2 lemma L3 word L4 phrase L5 clause L6 discourse 
+
 Implemented:
 
-- 7-layer hierarchy
 - cross-layer attention
 - FiLM modulation
-- realization algebra
-- lawful surface generation
-- causal independence probes
+- lawful realization
+- causal independence verification
+- tower receipts
 
-Tower hierarchy:
+Cross-layer structure:
 
-text L0 phoneme L1 morpheme L2 lemma L3 word L4 phrase L5 clause L6 discourse 
+text id="7a4bg7" L1 attends to L0 L2 attends to L1 ... L6 attends to L5 
 
 Causal independence verified:
 
-text zero L3 -> L0 remains stable 
+text id="l1qg7i" zero L3 -> L0 remains stable 
 
-This confirms top-down modulation does not collapse lower-level structure.
+This confirms higher layers do not collapse lower-level structure.
 
 ---
 
 # Morphological Realization
 
-Azim does not directly emit arbitrary text.
+Azim does not emit arbitrary unconstrained text.
 
 The tower emits structured realization constraints:
 
-text (lemma_id, class_id) 
+text id="4x44c7" (lemma_id, class_id) 
 
-which are mapped through a lawful realization algebra:
+which are mapped through a realization algebra:
 
-text ("sky", "noun_plural") -> "skies" 
-
-Illegal pairs fall back safely.
+text id="bo9vcq" ("sky", "noun_plural") -> "skies" 
 
 Implemented:
 
@@ -99,184 +118,239 @@ Implemented:
 - surface generation
 - deterministic realization receipts
 
+Illegal realization pairs fall back safely.
+
 ---
 
 # Phase 2 — RSSM
 
+The RSSM handles world-state recurrence and latent memory evolution.
+
 Implemented:
 
-- latent recurrent state model
+- recurrent state transitions
 - deterministic recurrence
-- associative scan equivalence
+- associative scan
 - RSSM ↔ Tower bridge
 - structural allocation
-- leakage probes
+- leakage monitoring
 - scale manifests
 
-RSSM recurrence:
+Core recurrence:
 
-text h_t = f(h_(t-1), x_t) 
+text id="5szr9j" h_t = f(h_(t-1), x_t) 
 
 Associative scan verified:
 
-text parallel scan == sequential recurrence 
+text id="8m2u1n" parallel scan == sequential recurrence 
 
-This establishes deterministic parallelizable recurrence.
+This establishes deterministic parallel recurrence.
 
 ---
 
 # RSSM ↔ Tower Separation
 
-Azim explicitly separates:
+Azim explicitly separates semantic memory from linguistic realization.
 
 | Component | Responsibility |
 |---|---|
-| RSSM | world-state memory |
-| Tower | linguistic realization |
+| RSSM | semantic/world-state memory |
+| Tower | syntax and realization |
 
 Bridge implemented:
 
-text RSSM attends to Tower L6 Tower attends to RSSM hidden state 
+text id="bsg7yy" RSSM attends to Tower L6 Tower attends to RSSM hidden state 
 
 Structural allocation enforced:
 
-text RSSM  = 80% Tower = 20% 
+text id="mznxoe" RSSM  = 80% Tower = 20% 
 
 ---
 
 # Leakage Detection
 
-Leakage probes verify the RSSM is not learning syntax.
+Leakage probes verify that the RSSM does not absorb syntax responsibilities.
 
 Implemented:
 
-- syntax probe
-- semantic probe
+- syntax probes
+- semantic probes
+- cosine monitoring
 - leakage thresholds
 - deterministic probe receipts
 
-Leakage condition:
+Leakage trigger:
 
-text rssm_score >= tower_score 
+text id="1fch5s" rssm_score >= tower_score 
 
-Clean split condition:
+Clean separation:
 
-text rssm_score < tower_score 
+text id="e8x4r5" rssm_score < tower_score 
 
 ---
 
-# Scale Manifest
+# Phase 3 — Gradient Oracle
 
-Implemented deterministic manifests for:
+Azim replaces unconstrained backpropagation with deterministic directional search.
 
-| Scale | Parameters |
+Implemented:
+
+- 8-direction orthogonal oracle
+- finite-difference gradients
+- hybrid oracle
+- cosine variance monitoring
+- basis expansion triggers
+- medium-scale manifests
+
+---
+
+# 8-Direction Orthogonal Oracle
+
+The oracle evaluates deterministic directional updates across orthogonal basis vectors.
+
+Implemented:
+
+- orthogonal basis generation
+- directional derivatives
+- oracle scoring
+- deterministic oracle receipts
+
+The oracle evaluates:
+
+text id="m0z1jz" 8 orthogonal update directions 
+
+instead of unconstrained stochastic parameter updates.
+
+---
+
+# Hybrid Oracle
+
+The hybrid oracle combines:
+
+| Component | Role |
 |---|---|
-| small | 10M |
-| medium | 50M |
-| large | 100M |
+| gradient hint | fast directional guidance |
+| discrete oracle | deterministic constrained search |
 
-Each scale preserves:
+This preserves deterministic search guarantees while improving convergence speed.
 
-- RSSM/Tower allocation
-- receipt determinism
-- bridge structure
-- replayability
+Implemented:
+
+- gradient hints
+- direction alignment scoring
+- best-direction selection
+- deterministic hybrid receipts
 
 ---
 
-# Deterministic Receipts
+# Gradient Variance Monitoring
 
-All major subsystems emit SHA-256 receipts.
+Variance monitoring tracks cosine similarity between consecutive updates.
+
+Implemented:
+
+- vector norms
+- cosine similarity
+- basis expansion triggers
+- deterministic variance receipts
 
 Examples:
 
-- tokenizer receipt
-- embedding receipt
-- attention receipt
-- realization receipt
-- RSSM receipt
-- bridge receipt
-- scan receipt
-- leakage receipt
-- scale manifest receipt
+text id="4l5c2r" same direction      -> 1.0 orthogonal updates  -> 0.0 
 
-Receipts commit to:
+Basis expansion condition:
 
-- inputs
-- outputs
-- configuration
-- execution structure
+text id="7r5n8h" cos_sim < 0.5 
+
+---
+
+# Medium Training Manifest
+
+Medium-scale deterministic manifests implemented for:
+
+| Scale | Parameters |
+|---|---|
+| medium | 100M |
+| medium | 250M |
+| medium | 500M |
+
+Each manifest verifies:
+
+- structural allocation
+- hybrid oracle usage
+- variance monitoring
+- replay determinism
 
 ---
 
 # Current Status
 
-text Phase 0 ✓  Deterministic Runtime Phase 1 ✓  Aware-Tower Phase 2 ✓  RSSM + Bridge + Scan + Allocation + Leakage 
+text id="f5v7qe" Phase 0 ✓ Deterministic Runtime Phase 1 ✓ Aware-Tower Phase 2 ✓ RSSM + Associative Scan Phase 3 ✓ Gradient Oracle 
 
-Implemented test domains:
+Implemented verification domains:
 
-- runtime determinism
-- transformer execution
-- realization lawfulness
+- deterministic execution
+- transformer hierarchy
+- lawful realization
 - recurrent state evolution
-- bridge grounding
-- causal independence
-- parallel scan equivalence
-- structural allocation
+- associative recurrence
+- structural separation
 - leakage detection
+- orthogonal oracle search
+- cosine variance monitoring
+- medium-scale manifests
 
 ---
 
 # Repository Structure
 
-text packages/azim_trial/ tests/ 
+text id="2n7qht" packages/azim_trial/ tests/ 
 
-Subsystems include:
+Major modules:
 
-text tokenizer tensor embedding attention block tower cross_tower film realization surface rssm rssm_tower_bridge associative_scan structural_allocation leakage_probe scale_manifest 
+text id="s7z7ie" tokenizer tensor embedding attention block cross_tower film realization surface rssm rssm_tower_bridge associative_scan structural_allocation leakage_probe scale_manifest gradient_oracle hybrid_oracle gradient_variance medium_training_manifest 
 
 ---
 
 # Running Tests
 
-Run individual tests:
+Example:
 
-bash fardrun test --program tests/test_rssm.fard 
+bash id="ov4g1m" fardrun test --program tests/test_gradient_oracle.fard 
 
-Run bridge tests:
+Variance monitoring:
 
-bash fardrun test --program tests/test_rssm_tower_bridge.fard 
+bash id="3zj4lj" fardrun test --program tests/test_gradient_variance.fard 
 
-Run scan tests:
+Hybrid oracle:
 
-bash fardrun test --program tests/test_associative_scan.fard 
+bash id="j4ujm0" fardrun test --program tests/test_hybrid_oracle.fard 
 
-Run leakage tests:
+RSSM bridge:
 
-bash fardrun test --program tests/test_leakage_probe.fard 
+bash id="0dbnbi" fardrun test --program tests/test_rssm_tower_bridge.fard 
 
 ---
 
-# Design Goal
+# Design Objective
 
-Azim is not attempting to build a conventional monolithic transformer.
+Azim is testing whether AI systems can be built around:
 
-The architecture explicitly separates:
-
-- recurrence
-- syntax
-- realization
-- semantic memory
-- lawful generation
-
-into deterministic replay-verifiable components.
-
-The objective is to test whether architectural separation can preserve:
-
-- causal independence
-- deterministic recurrence
-- lawful realization
+- deterministic execution
 - replay verification
-- scalable recurrent memory
+- constrained realization
+- structural separation
+- recurrent world models
+- orthogonal optimization
+- causal independence
 
-inside a fully deterministic execution environment.
+instead of monolithic stochastic transformers.
+
+The architecture attempts to preserve:
+
+- deterministic recurrence
+- lawful generation
+- replay-verifiable training
+- scalable recurrent memory
+- structurally isolated linguistic competence
+- deterministic optimization trajectories
