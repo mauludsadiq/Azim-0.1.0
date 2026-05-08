@@ -1,0 +1,43 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/gradient_variance") as gv
+
+test "gradient norm returns float" {
+  let v = tensor.vector([1.0, 0.0, 0.0]) in
+  type.of(gv.norm(v)) == "float"
+}
+
+test "cosine similarity same direction is one" {
+  let a = tensor.vector([1.0, 0.0, 0.0]) in
+  let b = tensor.vector([1.0, 0.0, 0.0]) in
+  gv.cosine_similarity(a, b) == 1.0
+}
+
+test "cosine similarity orthogonal is zero" {
+  let a = tensor.vector([1.0, 0.0, 0.0]) in
+  let b = tensor.vector([0.0, 1.0, 0.0]) in
+  gv.cosine_similarity(a, b) == 0.0
+}
+
+test "basis expansion needed under threshold" {
+  gv.basis_expansion_needed(0.3) == true
+}
+
+test "basis expansion not needed above threshold" {
+  gv.basis_expansion_needed(0.8) == false
+}
+
+test "variance report returns record" {
+  let a = tensor.vector([1.0, 0.0, 0.0]) in
+  let b = tensor.vector([0.0, 1.0, 0.0]) in
+  type.of(gv.variance_report(a, b)) == "record"
+}
+
+test "variance receipt deterministic" {
+  let a = tensor.vector([1.0, 0.0, 0.0]) in
+  let b = tensor.vector([0.0, 1.0, 0.0]) in
+  let x = gv.variance_with_receipt(a, b) in
+  let y = gv.variance_with_receipt(a, b) in
+  (x.receipt == y.receipt) && str.starts_with(x.receipt, "sha256:")
+}

@@ -1,0 +1,48 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/math") as math
+import("tensor") as tensor
+
+fn norm(v) {
+  math.sqrt(tensor.dot(v, v))
+}
+
+fn cosine_similarity(a, b) {
+  let denom = norm(a) * norm(b) in
+  if denom == 0.0 then 0.0 else tensor.dot(a, b) / denom
+}
+
+fn basis_expansion_needed(cos_sim) {
+  cos_sim < 0.5
+}
+
+fn variance_report(prev_update, current_update) {
+  let c = cosine_similarity(prev_update, current_update) in
+  {
+    cosine_similarity: c,
+    basis_expansion_needed: basis_expansion_needed(c)
+  }
+}
+
+fn variance_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.gradient_variance",
+    version: "phase3.2",
+    report: report
+  }))
+}
+
+fn variance_with_receipt(prev_update, current_update) {
+  let report = variance_report(prev_update, current_update) in
+  let receipt = variance_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  norm,
+  cosine_similarity,
+  basis_expansion_needed,
+  variance_report,
+  variance_receipt,
+  variance_with_receipt
+}
