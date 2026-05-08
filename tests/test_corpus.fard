@@ -1,0 +1,54 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/corpus") as corpus
+
+test "example returns record" {
+  type.of(corpus.example("sky is blue", "accepted", "p0")) == "record"
+}
+
+test "corpus returns record" {
+  let examples = [
+    corpus.example("sky is blue", "accepted", "p0"),
+    corpus.example("sky is green", "rejected", "p0")
+  ] in
+  type.of(corpus.corpus("toy", examples)) == "record"
+}
+
+test "corpus count matches examples" {
+  let examples = [
+    corpus.example("sky is blue", "accepted", "p0"),
+    corpus.example("sky is green", "rejected", "p0")
+  ] in
+  let c = corpus.corpus("toy", examples) in
+  c.count == 2
+}
+
+test "corpus get example returns text" {
+  let examples = [
+    corpus.example("sky is blue", "accepted", "p0"),
+    corpus.example("sky is green", "rejected", "p0")
+  ] in
+  let c = corpus.corpus("toy", examples) in
+  corpus.get_example(c, 0).text == "sky is blue"
+}
+
+test "corpus labels length" {
+  let examples = [
+    corpus.example("sky is blue", "accepted", "p0"),
+    corpus.example("sky is green", "rejected", "p0")
+  ] in
+  let c = corpus.corpus("toy", examples) in
+  list.len(corpus.labels(c)) == 2
+}
+
+test "corpus digest deterministic" {
+  let examples = [
+    corpus.example("sky is blue", "accepted", "p0"),
+    corpus.example("sky is green", "rejected", "p0")
+  ] in
+  let c = corpus.corpus("toy", examples) in
+  let a = corpus.corpus_digest(c) in
+  let b = corpus.corpus_digest(c) in
+  (a == b) && str.starts_with(a, "sha256:")
+}

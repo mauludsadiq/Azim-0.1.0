@@ -1,0 +1,50 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+
+fn example(text, label, parameter_id) {
+  {
+    text: text,
+    label: label,
+    parameter_id: parameter_id
+  }
+}
+
+fn corpus(name, examples) {
+  {
+    version: "2.9.0",
+    name: name,
+    examples: examples,
+    count: list.len(examples)
+  }
+}
+
+fn corpus_digest(c) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.corpus",
+    version: "2.9.0",
+    corpus: c
+  }))
+}
+
+fn corpus_with_digest(name, examples) {
+  let c = corpus(name, examples) in
+  {
+    corpus: c,
+    digest: corpus_digest(c)
+  }
+}
+
+fn get_example(c, i) {
+  list.get(c.examples, i)
+}
+
+fn labels(c) {
+  list.map(c.examples, fn(e) { e.label })
+}
+
+fn texts(c) {
+  list.map(c.examples, fn(e) { e.text })
+}
+
+export { example, corpus, corpus_digest, corpus_with_digest, get_example, labels, texts }
