@@ -1,0 +1,48 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+import("cross_tower") as tower
+import("rssm") as rssm
+
+fn tower_l6(text) {
+  let t = tower.tower(text) in
+  list.get(t.layers, 6).output
+}
+
+fn rssm_attend_tower(state, l6_output) {
+  tensor.scale(tensor.add(state, l6_output), 0.5)
+}
+
+fn tower_attend_rssm(l6_output, state) {
+  tensor.scale(tensor.add(l6_output, state), 0.5)
+}
+
+fn bridge(text, initial_state) {
+  let l6 = tower_l6(text) in
+  let rssm_state = rssm_attend_tower(initial_state, l6) in
+  let grounded_tower = tower_attend_rssm(l6, rssm_state) in
+  {
+    input_text: text,
+    initial_state: initial_state,
+    tower_l6: l6,
+    rssm_state: rssm_state,
+    grounded_tower: grounded_tower
+  }
+}
+
+fn bridge_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.rssm_tower_bridge",
+    version: "phase2.1b",
+    output: output
+  }))
+}
+
+fn bridge_with_receipt(text, initial_state) {
+  let output = bridge(text, initial_state) in
+  let receipt = bridge_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export { tower_l6, rssm_attend_tower, tower_attend_rssm, bridge, bridge_receipt, bridge_with_receipt }

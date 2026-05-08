@@ -1,0 +1,42 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/rssm") as rssm
+import("../packages/azim_trial/rssm_tower_bridge") as bridge
+
+test "tower l6 returns tensor" {
+  type.of(bridge.tower_l6("sky is blue")) == "record"
+}
+
+test "rssm attend tower returns tensor" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  type.of(bridge.rssm_attend_tower(s, l6)) == "record"
+}
+
+test "tower attend rssm returns tensor" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  type.of(bridge.tower_attend_rssm(l6, s)) == "record"
+}
+
+test "bridge returns record" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  type.of(bridge.bridge("sky is blue", s)) == "record"
+}
+
+test "bridge preserves grounded dimension" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  let out = bridge.bridge("sky is blue", s) in
+  list.len(out.grounded_tower.data) == list.len(l6.data)
+}
+
+test "bridge receipt deterministic" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  let a = bridge.bridge_with_receipt("sky is blue", s) in
+  let b = bridge.bridge_with_receipt("sky is blue", s) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
