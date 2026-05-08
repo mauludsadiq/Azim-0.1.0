@@ -1,0 +1,35 @@
+import("std/str") as str
+import("std/type") as type
+import("std/list") as list
+import("../packages/azim_trial/rssm") as rssm
+import("../packages/azim_trial/rssm_tower_bridge") as bridge
+import("../packages/azim_trial/leakage_probe") as leak
+
+test "syntax probe score returns float" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  type.of(leak.syntax_probe_score(s)) == "float"
+}
+
+test "semantic probe score returns float" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  type.of(leak.semantic_probe_score(l6)) == "float"
+}
+
+test "leakage detected returns bool" {
+  type.of(leak.leakage_detected(0.1, 0.2)) == "bool"
+}
+
+test "leakage probe returns record" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  type.of(leak.probe("sky is blue", s)) == "record"
+}
+
+test "leakage probe receipt deterministic" {
+  let l6 = bridge.tower_l6("sky is blue") in
+  let s = rssm.init_state(list.len(l6.data)) in
+  let a = leak.probe_with_receipt("sky is blue", s) in
+  let b = leak.probe_with_receipt("sky is blue", s) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

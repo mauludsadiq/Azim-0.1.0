@@ -1,0 +1,53 @@
+import("std/json") as json
+import("std/hash") as hash
+import("tensor") as tensor
+import("std/list") as list
+import("rssm") as rssm
+import("cross_tower") as tower
+import("rssm_tower_bridge") as bridge
+
+fn tensor_mean(t) {
+  let total = list.fold(t.data, 0.0, fn(acc, x) { acc + x }) in
+  total / list.len(t.data)
+}
+
+fn syntax_probe_score(state_tensor) {
+  tensor_mean(state_tensor)
+}
+
+fn semantic_probe_score(tower_tensor) {
+  tensor_mean(tower_tensor)
+}
+
+fn leakage_detected(rssm_score, tower_score) {
+  rssm_score >= tower_score
+}
+
+fn probe(text, initial_state) {
+  let bridged = bridge.bridge(text, initial_state) in
+  let rssm_score = syntax_probe_score(bridged.rssm_state) in
+  let tower_score = semantic_probe_score(bridged.grounded_tower) in
+  {
+    input_text: text,
+    rssm_score: rssm_score,
+    tower_score: tower_score,
+    leakage_detected: leakage_detected(rssm_score, tower_score),
+    clean_split: leakage_detected(rssm_score, tower_score) == false
+  }
+}
+
+fn probe_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.leakage_probe",
+    version: "phase2.4",
+    report: report
+  }))
+}
+
+fn probe_with_receipt(text, initial_state) {
+  let report = probe(text, initial_state) in
+  let receipt = probe_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export { tensor_mean, syntax_probe_score, semantic_probe_score, leakage_detected, probe, probe_receipt, probe_with_receipt }
