@@ -1,0 +1,54 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tensor") as tensor
+
+fn init_state(dim) {
+  tensor.vector(list.repeat(0.0, dim))
+}
+
+fn transition(prev_state, input_vector) {
+  tensor.scale(tensor.add(prev_state, input_vector), 0.5)
+}
+
+fn step(prev_state, input_vector) {
+  let next = transition(prev_state, input_vector) in
+  {
+    prev_state: prev_state,
+    input: input_vector,
+    state: next
+  }
+}
+
+fn run(inputs, initial_state) {
+  list.fold(inputs, initial_state, fn(state, input_vector) {
+    transition(state, input_vector)
+  })
+}
+
+fn run_trace(inputs, initial_state) {
+  let init = { state: initial_state, steps: [] } in
+  list.fold(inputs, init, fn(acc, input_vector) {
+    let s = step(acc.state, input_vector) in
+    {
+      state: s.state,
+      steps: list.append(acc.steps, s)
+    }
+  })
+}
+
+fn rssm_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.rssm",
+    version: "phase2.1",
+    output: output
+  }))
+}
+
+fn run_trace_with_receipt(inputs, initial_state) {
+  let output = run_trace(inputs, initial_state) in
+  let receipt = rssm_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export { init_state, transition, step, run, run_trace, rssm_receipt, run_trace_with_receipt }

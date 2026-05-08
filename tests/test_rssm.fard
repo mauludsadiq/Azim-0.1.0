@@ -1,0 +1,47 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/rssm") as rssm
+
+test "rssm init state returns tensor" {
+  type.of(rssm.init_state(3)) == "record"
+}
+
+test "rssm init state dimension" {
+  let s = rssm.init_state(3) in
+  list.len(s.data) == 3
+}
+
+test "rssm transition returns tensor" {
+  let s = rssm.init_state(3) in
+  let x = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(rssm.transition(s, x)) == "record"
+}
+
+test "rssm step returns record" {
+  let s = rssm.init_state(3) in
+  let x = tensor.vector([1.0, 2.0, 3.0]) in
+  type.of(rssm.step(s, x)) == "record"
+}
+
+test "rssm run trace records steps" {
+  let s = rssm.init_state(3) in
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  let out = rssm.run_trace(xs, s) in
+  list.len(out.steps) == 2
+}
+
+test "rssm trace receipt deterministic" {
+  let s = rssm.init_state(3) in
+  let xs = [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0])
+  ] in
+  let a = rssm.run_trace_with_receipt(xs, s) in
+  let b = rssm.run_trace_with_receipt(xs, s) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
