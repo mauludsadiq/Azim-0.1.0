@@ -1,0 +1,48 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/tiling_engine") as tile
+
+test "tile config returns record" {
+  type.of(tile.tile_config(64, "row_major")) == "record"
+}
+
+test "tiled matvec returns record" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let c = tile.tile_config(64, "row_major") in
+  type.of(tile.tiled_matvec(m, v, c)) == "record"
+}
+
+test "tiled matvec output is tensor" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let c = tile.tile_config(64, "row_major") in
+  let out = tile.tiled_matvec(m, v, c) in
+  type.of(out.output) == "record"
+}
+
+test "same math receipt across tile sizes" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let a = tile.tiled_matvec_with_dual_receipt(m, v, tile.tile_config(32, "row_major")) in
+  let b = tile.tiled_matvec_with_dual_receipt(m, v, tile.tile_config(64, "row_major")) in
+  a.math_receipt == b.math_receipt
+}
+
+test "different impl receipt across tile sizes" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let a = tile.tiled_matvec_with_dual_receipt(m, v, tile.tile_config(32, "row_major")) in
+  let b = tile.tiled_matvec_with_dual_receipt(m, v, tile.tile_config(64, "row_major")) in
+  a.impl_receipt != b.impl_receipt
+}
+
+test "tiling dual receipts deterministic" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let c = tile.tile_config(64, "row_major") in
+  let a = tile.tiled_matvec_with_dual_receipt(m, v, c) in
+  let b = tile.tiled_matvec_with_dual_receipt(m, v, c) in
+  (a.math_receipt == b.math_receipt) && (a.impl_receipt == b.impl_receipt) && str.starts_with(a.math_receipt, "sha256:")
+}

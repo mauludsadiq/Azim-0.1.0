@@ -1,0 +1,55 @@
+import("std/json") as json
+import("std/hash") as hash
+import("tensor") as tensor
+import("dual_receipt") as dual
+
+fn tile_config(tile_size, layout) {
+  {
+    tile_size: tile_size,
+    layout: layout
+  }
+}
+
+fn tiled_matvec(matrix_tensor, vector_tensor, config) {
+  {
+    output: tensor.matvec(matrix_tensor, vector_tensor),
+    config: config
+  }
+}
+
+fn math_contract(output_tensor) {
+  {
+    output: output_tensor
+  }
+}
+
+fn impl_contract(matrix_tensor, vector_tensor, config, output_tensor) {
+  {
+    matrix: matrix_tensor,
+    vector: vector_tensor,
+    tile_size: config.tile_size,
+    layout: config.layout,
+    output: output_tensor
+  }
+}
+
+fn tiled_matvec_with_dual_receipt(matrix_tensor, vector_tensor, config) {
+  let result = tiled_matvec(matrix_tensor, vector_tensor, config) in
+  let math = math_contract(result.output) in
+  let impl = impl_contract(matrix_tensor, vector_tensor, config, result.output) in
+  let receipts = dual.dual_receipt("tiled_matvec", math, "tiling_engine", config, impl) in
+  {
+    output: result.output,
+    config: config,
+    math_receipt: receipts.math_receipt,
+    impl_receipt: receipts.impl_receipt
+  }
+}
+
+export {
+  tile_config,
+  tiled_matvec,
+  math_contract,
+  impl_contract,
+  tiled_matvec_with_dual_receipt
+}
