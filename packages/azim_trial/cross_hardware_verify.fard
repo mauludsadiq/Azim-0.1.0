@@ -1,0 +1,56 @@
+import("std/json") as json
+import("std/hash") as hash
+import("tiling_engine") as tile
+
+fn hardware_config(name, tile_size, layout) {
+  {
+    name: name,
+    tile_size: tile_size,
+    layout: layout
+  }
+}
+
+fn run_on_hardware(matrix_tensor, vector_tensor, hw) {
+  let config = tile.tile_config(hw.tile_size, hw.layout) in
+  let run = tile.tiled_matvec_with_dual_receipt(matrix_tensor, vector_tensor, config) in
+  {
+    hardware: hw.name,
+    output: run.output,
+    math_receipt: run.math_receipt,
+    impl_receipt: run.impl_receipt
+  }
+}
+
+fn verify_cross_hardware(cpu_run, gpu_run) {
+  {
+    cpu: cpu_run,
+    gpu: gpu_run,
+    math_match: cpu_run.math_receipt == gpu_run.math_receipt,
+    impl_differs: cpu_run.impl_receipt != gpu_run.impl_receipt,
+    ok: (cpu_run.math_receipt == gpu_run.math_receipt) && (cpu_run.impl_receipt != gpu_run.impl_receipt)
+  }
+}
+
+fn verify_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.cross_hardware_verify",
+    version: "phase4.2",
+    report: report
+  }))
+}
+
+fn verify_with_receipt(matrix_tensor, vector_tensor) {
+  let cpu = run_on_hardware(matrix_tensor, vector_tensor, hardware_config("cpu", 32, "row_major")) in
+  let gpu = run_on_hardware(matrix_tensor, vector_tensor, hardware_config("gpu", 64, "row_major")) in
+  let report = verify_cross_hardware(cpu, gpu) in
+  let receipt = verify_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  hardware_config,
+  run_on_hardware,
+  verify_cross_hardware,
+  verify_receipt,
+  verify_with_receipt
+}

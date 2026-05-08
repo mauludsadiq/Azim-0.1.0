@@ -1,0 +1,48 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/cross_hardware_verify") as hw
+
+test "hardware config returns record" {
+  type.of(hw.hardware_config("cpu", 32, "row_major")) == "record"
+}
+
+test "run on hardware returns record" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let c = hw.hardware_config("cpu", 32, "row_major") in
+  type.of(hw.run_on_hardware(m, v, c)) == "record"
+}
+
+test "cross hardware math receipts match" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let cpu = hw.run_on_hardware(m, v, hw.hardware_config("cpu", 32, "row_major")) in
+  let gpu = hw.run_on_hardware(m, v, hw.hardware_config("gpu", 64, "row_major")) in
+  let report = hw.verify_cross_hardware(cpu, gpu) in
+  report.math_match == true
+}
+
+test "cross hardware impl receipts differ" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let cpu = hw.run_on_hardware(m, v, hw.hardware_config("cpu", 32, "row_major")) in
+  let gpu = hw.run_on_hardware(m, v, hw.hardware_config("gpu", 64, "row_major")) in
+  let report = hw.verify_cross_hardware(cpu, gpu) in
+  report.impl_differs == true
+}
+
+test "cross hardware verification ok" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let out = hw.verify_with_receipt(m, v) in
+  out.report.ok == true
+}
+
+test "cross hardware verification receipt deterministic" {
+  let m = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  let v = tensor.vector([1.0, 1.0]) in
+  let a = hw.verify_with_receipt(m, v) in
+  let b = hw.verify_with_receipt(m, v) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
