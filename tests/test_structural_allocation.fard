@@ -1,0 +1,33 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/structural_allocation") as alloc
+
+test "allocation returns record" {
+  type.of(alloc.allocation(80.0, 20.0)) == "record"
+}
+
+test "allocation ratios are correct" {
+  let a = alloc.allocation(80.0, 20.0) in
+  (a.rssm_ratio == 0.8) && (a.tower_ratio == 0.2)
+}
+
+test "allocation ok for 80 20 split" {
+  let a = alloc.allocation(80.0, 20.0) in
+  alloc.allocation_ok(a) == true
+}
+
+test "default allocation ok" {
+  let a = alloc.default_allocation(100.0) in
+  alloc.allocation_ok(a) == true
+}
+
+test "allocation report ok true" {
+  let r = alloc.allocation_report(100.0) in
+  r.ok == true
+}
+
+test "allocation receipt deterministic" {
+  let a = alloc.allocation_with_receipt(100.0) in
+  let b = alloc.allocation_with_receipt(100.0) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

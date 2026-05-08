@@ -1,0 +1,48 @@
+import("std/json") as json
+import("std/hash") as hash
+
+fn allocation(rssm_params, tower_params) {
+  let total = rssm_params + tower_params in
+  {
+    rssm_params: rssm_params,
+    tower_params: tower_params,
+    total_params: total,
+    rssm_ratio: rssm_params / total,
+    tower_ratio: tower_params / total
+  }
+}
+
+fn allocation_ok(a) {
+  (a.rssm_ratio >= 0.79) && (a.rssm_ratio <= 0.81) &&
+  (a.tower_ratio >= 0.19) && (a.tower_ratio <= 0.21)
+}
+
+fn default_allocation(total_params) {
+  let rssm_params = total_params * 0.8 in
+  let tower_params = total_params * 0.2 in
+  allocation(rssm_params, tower_params)
+}
+
+fn allocation_report(total_params) {
+  let a = default_allocation(total_params) in
+  {
+    allocation: a,
+    ok: allocation_ok(a)
+  }
+}
+
+fn allocation_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.structural_allocation",
+    version: "phase2.3",
+    report: report
+  }))
+}
+
+fn allocation_with_receipt(total_params) {
+  let report = allocation_report(total_params) in
+  let receipt = allocation_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export { allocation, allocation_ok, default_allocation, allocation_report, allocation_receipt, allocation_with_receipt }
