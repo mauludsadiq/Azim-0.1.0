@@ -4,14 +4,14 @@ import("std/type") as type
 import("../packages/azim_trial/tensor") as tensor
 import("../packages/azim_trial/train_step") as train
 
-test "fake gradient returns tensor record" {
+test "finite gradient returns tensor record" {
   let w = tensor.vector([1.0, 2.0, 3.0]) in
-  type.of(train.fake_gradient_like(w, 2.0)) == "record"
+  type.of(train.gradient_like(w, 2.0)) == "record"
 }
 
-test "fake gradient preserves length" {
+test "finite gradient preserves length" {
   let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let g = train.fake_gradient_like(w, 2.0) in
+  let g = train.gradient_like(w, 2.0) in
   list.len(g.data) == list.len(w.data)
 }
 

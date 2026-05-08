@@ -3,14 +3,15 @@ import("std/hash") as hash
 import("tensor") as tensor
 import("loss") as loss
 import("optimizer") as opt
+import("finite_difference_gradient") as fdg
 
-fn fake_gradient_like(weight_tensor, loss_value) {
-  tensor.map(weight_tensor, fn(x) { loss_value * 0.001 })
+fn gradient_like(weight_tensor, loss_value) {
+  fdg.finite_gradient(weight_tensor, 0.001)
 }
 
 fn train_step(weight_tensor, input_text, target_label, lr) {
   let loss_step = loss.loss_with_receipt(input_text, target_label) in
-  let grad = fake_gradient_like(weight_tensor, loss_step.loss) in
+  let grad = gradient_like(weight_tensor, loss_step.loss) in
   let opt_step = opt.optimizer_step_with_receipt(weight_tensor, grad, lr) in
   {
     input_text: input_text,
@@ -38,4 +39,4 @@ fn train_step_with_receipt(weight_tensor, input_text, target_label, lr) {
   { step: step, receipt: receipt }
 }
 
-export { fake_gradient_like, train_step, train_step_receipt, train_step_with_receipt }
+export { gradient_like, train_step, train_step_receipt, train_step_with_receipt }
