@@ -1,0 +1,51 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("gradient_variance") as gv
+import("gradient_oracle") as oracle
+
+fn next_basis_size(current_size) {
+  if current_size < 16 then 16 else
+  if current_size < 32 then 32 else
+  current_size
+}
+
+fn expansion_event(step, current_size, cos_sim) {
+  let trigger = gv.basis_expansion_needed(cos_sim) in
+  let next_size = if trigger then next_basis_size(current_size) else current_size in
+  {
+    step: step,
+    current_basis_size: current_size,
+    cosine_similarity: cos_sim,
+    trigger: trigger,
+    next_basis_size: next_size
+  }
+}
+
+fn expanded_directions(dim, basis_size) {
+  list.build(basis_size, fn(i) {
+    oracle.basis_direction(dim, i % dim)
+  })
+}
+
+fn event_receipt(event) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.basis_expansion.event",
+    version: "phase5.0",
+    event: event
+  }))
+}
+
+fn expansion_with_receipt(step, current_size, cos_sim) {
+  let event = expansion_event(step, current_size, cos_sim) in
+  let receipt = event_receipt(event) in
+  { event: event, receipt: receipt }
+}
+
+export {
+  next_basis_size,
+  expansion_event,
+  expanded_directions,
+  event_receipt,
+  expansion_with_receipt
+}

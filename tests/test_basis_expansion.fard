@@ -1,0 +1,37 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/basis_expansion") as be
+
+test "next basis expands 8 to 16" {
+  be.next_basis_size(8) == 16
+}
+
+test "next basis expands 16 to 32" {
+  be.next_basis_size(16) == 32
+}
+
+test "next basis stays at 32" {
+  be.next_basis_size(32) == 32
+}
+
+test "expansion event triggers under threshold" {
+  let e = be.expansion_event(1, 8, 0.3) in
+  (e.trigger == true) && (e.next_basis_size == 16)
+}
+
+test "expansion event does not trigger above threshold" {
+  let e = be.expansion_event(1, 8, 0.8) in
+  (e.trigger == false) && (e.next_basis_size == 8)
+}
+
+test "expanded directions length matches basis size" {
+  let dirs = be.expanded_directions(4, 16) in
+  list.len(dirs) == 16
+}
+
+test "basis expansion receipt deterministic" {
+  let a = be.expansion_with_receipt(1, 8, 0.3) in
+  let b = be.expansion_with_receipt(1, 8, 0.3) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
