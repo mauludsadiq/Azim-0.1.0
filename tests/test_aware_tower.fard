@@ -1,0 +1,46 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/aware_tower") as aware
+
+test "aware tower returns record" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  type.of(aware.aware_tower(claim)) == "record"
+}
+
+test "aware tower accepts true claim" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let out = aware.aware_tower(claim) in
+  out.final_verdict == "accepted"
+}
+
+test "aware tower rejects false claim" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "green" } in
+  let out = aware.aware_tower(claim) in
+  out.final_verdict == "rejected"
+}
+
+test "aware tower needs evidence for unknown claim" {
+  let claim = { predicate: "has-color", subject: "moon", property: "color", value: "silver" } in
+  let out = aware.aware_tower(claim) in
+  out.final_verdict == "needs-evidence"
+}
+
+test "aware tower has seven receipt linked layers" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let out = aware.aware_tower(claim) in
+  (list.len(out.tower.layers) == 7) && str.starts_with(list.get(out.tower.layers, 6).receipt, "sha256:")
+}
+
+test "aware tower derives ok from tower lawful receipts semantic authority" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let out = aware.aware_tower(claim) in
+  out.tower_valid && out.lawful_valid && out.receipts_valid && out.semantic_authoritative && out.ok
+}
+
+test "aware tower receipt deterministic" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let a = aware.aware_tower_with_receipt(claim) in
+  let b = aware.aware_tower_with_receipt(claim) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

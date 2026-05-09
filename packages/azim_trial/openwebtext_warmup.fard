@@ -1,5 +1,7 @@
 import("std/json") as json
 import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
 
 fn warmup_config(steps, target_loss) {
   {
@@ -12,36 +14,81 @@ fn warmup_config(steps, target_loss) {
   }
 }
 
-fn warmup_report(config) {
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn receipts_ok(receipts) {
+  list.all(receipts, fn(r) { receipt_ok(r) })
+}
+
+fn loss_target_met(observed_loss, target_loss) {
+  observed_loss <= target_loss
+}
+
+fn warmup_report_from_evidence(config, evidence) {
+  let validator_ok = evidence.validator_ok == true in
+  let distributed_ok = evidence.distributed_ok == true in
+  let receipt_chain_ok = receipts_ok(evidence.receipts) in
+  let loss_ok = loss_target_met(evidence.observed_loss, config.target_loss) in
+  let warmup_complete =
+    validator_ok &&
+    distributed_ok &&
+    receipt_chain_ok &&
+    loss_ok
+  in
   {
     config: config,
-    warmup_complete: true,
-    observed_loss: 0.42,
+    warmup_complete: warmup_complete,
+    observed_loss: evidence.observed_loss,
     target_loss: config.target_loss,
-    validator_ok: true,
-    distributed_ok: true,
-    receipts_ok: true,
-    ok: true
+    validator_ok: validator_ok,
+    distributed_ok: distributed_ok,
+    receipts_ok: receipt_chain_ok,
+    loss_target_met: loss_ok,
+    ok: warmup_complete
   }
+}
+
+fn default_evidence(config) {
+  {
+    observed_loss: 1.0,
+    validator_ok: false,
+    distributed_ok: false,
+    receipts: []
+  }
+}
+
+fn warmup_report(config) {
+  warmup_report_from_evidence(config, default_evidence(config))
 }
 
 fn warmup_receipt(report) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.openwebtext_warmup",
-    version: "phase8.0",
+    version: "phase8.1",
     report: report
   }))
 }
 
-fn warmup_with_receipt(config) {
-  let report = warmup_report(config) in
+fn warmup_with_evidence_and_receipt(config, evidence) {
+  let report = warmup_report_from_evidence(config, evidence) in
   let receipt = warmup_receipt(report) in
   { report: report, receipt: receipt }
 }
 
+fn warmup_with_receipt(config) {
+  warmup_with_evidence_and_receipt(config, default_evidence(config))
+}
+
 export {
   warmup_config,
+  receipt_ok,
+  receipts_ok,
+  loss_target_met,
+  warmup_report_from_evidence,
   warmup_report,
   warmup_receipt,
+  warmup_with_evidence_and_receipt,
   warmup_with_receipt
 }

@@ -20,9 +20,29 @@ test "starter cluster has 1p5b params" {
   c.total_params == 1500000000.0
 }
 
-test "cluster report ok" {
+test "cluster report defaults to not ok" {
   let r = spc.cluster_report(spc.starter_cluster()) in
+  r.ok == false
+}
+
+test "cluster evidence derives ok true" {
+  let e = {
+    distributed: true,
+    state_pack_enabled: true,
+    receipts: ["sha256:a", "sha256:b"]
+  } in
+  let r = spc.cluster_report_from_evidence(spc.starter_cluster(), e) in
   r.ok == true
+}
+
+test "cluster evidence rejects bad receipt" {
+  let e = {
+    distributed: true,
+    state_pack_enabled: true,
+    receipts: ["sha256:a", "bad"]
+  } in
+  let r = spc.cluster_report_from_evidence(spc.starter_cluster(), e) in
+  r.receipts_ok == false && r.ok == false
 }
 
 test "cluster receipt deterministic" {

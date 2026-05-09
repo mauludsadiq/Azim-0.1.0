@@ -1,6 +1,7 @@
 import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
+import("std/str") as str
 
 fn sidechain_event(step, impl_receipt, probe_receipt, status) {
   {
@@ -22,15 +23,29 @@ fn main_chain_entry(step, math_receipt) {
   }
 }
 
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn main_chain_entry_ok(e) {
+  receipt_ok(e.math_receipt)
+}
+
+fn sidechain_event_ok(e) {
+  receipt_ok(e.impl_receipt) && receipt_ok(e.probe_receipt) && ((e.status == "ok") || (e.status == "warning"))
+}
+
 fn forensic_report(main_chain, sidechain) {
+  let main_ok = list.all(main_chain, fn(e) { main_chain_entry_ok(e) }) in
+  let side_ok = list.all(sidechain, fn(e) { sidechain_event_ok(e) }) in
   {
     main_chain: main_chain,
     sidechain: sidechain,
     main_chain_len: list.len(main_chain),
     sidechain_len: list.len(sidechain),
-    clean_verification_chain: true,
-    interpretability_chain: true,
-    ok: true
+    clean_verification_chain: main_ok,
+    interpretability_chain: side_ok,
+    ok: main_ok && side_ok
   }
 }
 

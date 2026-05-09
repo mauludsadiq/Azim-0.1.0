@@ -1,0 +1,78 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("tower_film") as tf
+import("lawful_inference") as law
+import("validator") as val
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn tower_ok(tower_report) {
+  tower_report.receipt_ok &&
+  tower_report.layer_count_ok &&
+  tower_report.first_layer_ok &&
+  tower_report.final_layer_ok
+}
+
+fn lawful_ok(lawful_report) {
+  lawful_report.inference_receipt_ok &&
+  lawful_report.surface_receipt_ok &&
+  lawful_report.realization_receipt_ok &&
+  lawful_report.lawful_surface
+}
+
+fn aware_tower(claim) {
+  let lawful = law.lawful_infer_with_receipt(claim) in
+  let tower = tf.tower_with_film_receipt(lawful.output.inference.input_text) in
+  let validation = val.validate_claim(claim) in
+  let tower_valid = tower_ok(validation.tower) in
+  let lawful_valid = lawful_ok(validation.lawful) in
+  let receipts_valid =
+    receipt_ok(lawful.receipt) &&
+    receipt_ok(tower.receipt) &&
+    receipt_ok(lawful.output.inference_receipt) &&
+    receipt_ok(lawful.output.surface_receipt) &&
+    receipt_ok(lawful.output.realization_sha256)
+  in
+  {
+    claim: claim,
+    input_text: lawful.output.inference.input_text,
+    tower: tower.tower,
+    tower_receipt: tower.receipt,
+    lawful_output: lawful.output,
+    lawful_receipt: lawful.receipt,
+    validation: validation,
+    final_verdict: lawful.output.final_verdict,
+    tower_valid: tower_valid,
+    lawful_valid: lawful_valid,
+    receipts_valid: receipts_valid,
+    semantic_authoritative: validation.final_verdict == lawful.output.final_verdict,
+    ok: tower_valid && lawful_valid && receipts_valid && (validation.final_verdict == lawful.output.final_verdict)
+  }
+}
+
+fn aware_tower_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.aware_tower",
+    version: "1.0.0",
+    output: output
+  }))
+}
+
+fn aware_tower_with_receipt(claim) {
+  let output = aware_tower(claim) in
+  let receipt = aware_tower_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export {
+  receipt_ok,
+  tower_ok,
+  lawful_ok,
+  aware_tower,
+  aware_tower_receipt,
+  aware_tower_with_receipt
+}

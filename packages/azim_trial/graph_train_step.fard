@@ -9,13 +9,34 @@ fn graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) {
   if param == null then {
     registry: reg,
     graph: graph,
+    train_step: null,
+    train_step_receipt: null,
+    node_digest: null,
     ok: false,
     error: "missing parameter"
+  } else
+  if param.trainable != true then {
+    registry: reg,
+    graph: graph,
+    train_step: null,
+    train_step_receipt: null,
+    node_digest: null,
+    ok: false,
+    error: "parameter not trainable"
   } else
   let stepped = train.train_step_with_receipt(param.tensor, input_text, target_label, lr) in
   let next_reg = preg.update_param(reg, parameter_id, stepped.step.updated_weight, stepped.receipt) in
   let n = mg.node(
-    "train_step",
+    hash.sha256_text(json.canonicalize({
+      component: "azim_trial.graph_train_step.node_id",
+      version: "2.6.1",
+      parameter_id: parameter_id,
+      input_text: input_text,
+      target_label: target_label,
+      lr: lr,
+      prior_graph_digest: mg.graph_digest(graph),
+      train_step_receipt: stepped.receipt
+    })),
     "azim_trial.train_step",
     [input_text, target_label],
     [parameter_id],
@@ -29,7 +50,7 @@ fn graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) {
     train_step: stepped.step,
     train_step_receipt: stepped.receipt,
     node_digest: mg.node_digest(n),
-    ok: true
+    ok: mg.node_receipts_ok(n) && mg.graph_receipts_ok(next_graph)
   }
 }
 

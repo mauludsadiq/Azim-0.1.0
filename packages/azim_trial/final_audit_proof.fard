@@ -1,5 +1,7 @@
 import("std/json") as json
 import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
 
 fn audit_config(model_name, parameter_count) {
   {
@@ -8,41 +10,97 @@ fn audit_config(model_name, parameter_count) {
     lawful_output_required: true,
     causal_independence_required: true,
     leakage_threshold: 0.05,
-    cryptographic_replay_required: true
+    cryptographic_replay_required: true,
+    min_parameter_count: 1500000000.0
+  }
+}
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn chain_receipts_ok(receipts) {
+  list.all(receipts, fn(r) { receipt_ok(r) })
+}
+
+fn leakage_below_threshold(leakage, threshold) {
+  leakage <= threshold
+}
+
+fn scale_verified(config) {
+  config.parameter_count >= config.min_parameter_count
+}
+
+fn audit_report_from_evidence(config, evidence) {
+  let lawful_outputs = evidence.lawful_outputs == true in
+  let causal_independence_preserved = evidence.causal_independence_preserved == true in
+  let leakage_below = leakage_below_threshold(evidence.leakage_score, config.leakage_threshold) in
+  let receipt_chain_complete = chain_receipts_ok(evidence.receipts) in
+  let replay_verified = evidence.replay_verified == true && receipt_chain_complete in
+  let gpt2_xl_scale_verified = scale_verified(config) in
+  let proof_complete =
+    lawful_outputs &&
+    causal_independence_preserved &&
+    leakage_below &&
+    receipt_chain_complete &&
+    replay_verified &&
+    gpt2_xl_scale_verified
+  in
+  {
+    config: config,
+    evidence: evidence,
+    lawful_outputs: lawful_outputs,
+    causal_independence_preserved: causal_independence_preserved,
+    leakage_below_threshold: leakage_below,
+    receipt_chain_complete: receipt_chain_complete,
+    replay_verified: replay_verified,
+    gpt2_xl_scale_verified: gpt2_xl_scale_verified,
+    proof_complete: proof_complete,
+    ok: proof_complete
+  }
+}
+
+fn default_evidence(config) {
+  {
+    lawful_outputs: false,
+    causal_independence_preserved: false,
+    leakage_score: 1.0,
+    receipts: [],
+    replay_verified: false
   }
 }
 
 fn audit_report(config) {
-  {
-    config: config,
-    lawful_outputs: true,
-    causal_independence_preserved: true,
-    leakage_below_threshold: true,
-    receipt_chain_complete: true,
-    replay_verified: true,
-    gpt2_xl_scale_verified: true,
-    proof_complete: true,
-    ok: true
-  }
+  audit_report_from_evidence(config, default_evidence(config))
 }
 
 fn proof_receipt(report) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.final_audit_proof",
-    version: "phase8.2",
+    version: "phase8.3",
     report: report
   }))
 }
 
-fn proof_with_receipt(config) {
-  let report = audit_report(config) in
+fn proof_with_evidence_and_receipt(config, evidence) {
+  let report = audit_report_from_evidence(config, evidence) in
   let receipt = proof_receipt(report) in
   { report: report, receipt: receipt }
 }
 
+fn proof_with_receipt(config) {
+  proof_with_evidence_and_receipt(config, default_evidence(config))
+}
+
 export {
   audit_config,
+  receipt_ok,
+  chain_receipts_ok,
+  leakage_below_threshold,
+  scale_verified,
+  audit_report_from_evidence,
   audit_report,
   proof_receipt,
+  proof_with_evidence_and_receipt,
   proof_with_receipt
 }

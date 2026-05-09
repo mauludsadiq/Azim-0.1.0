@@ -1,6 +1,7 @@
 import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
+import("std/str") as str
 import("structural_allocation") as alloc
 
 fn node_config(node_id, role, params) {
@@ -35,35 +36,91 @@ fn starter_cluster() {
   )
 }
 
-fn cluster_report(config) {
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn receipts_ok(receipts) {
+  list.all(receipts, fn(r) { receipt_ok(r) })
+}
+
+fn node_params_sum(nodes) {
+  list.fold(nodes, 0.0, fn(acc, n) { acc + n.params })
+}
+
+fn node_params_match_total(config) {
+  node_params_sum(config.nodes) == config.total_params
+}
+
+fn cluster_report_from_evidence(config, evidence) {
+  let distributed = evidence.distributed == true in
+  let state_pack_enabled = evidence.state_pack_enabled == true in
+  let receipt_chain_ok = receipts_ok(evidence.receipts) in
+  let node_count_ok = list.len(config.nodes) == config.node_count in
+  let params_ok = node_params_match_total(config) in
+  let allocation_ok = config.allocation_ok == true in
+  let ok =
+    distributed &&
+    state_pack_enabled &&
+    receipt_chain_ok &&
+    node_count_ok &&
+    params_ok &&
+    allocation_ok
+  in
   {
     config: config,
-    distributed: true,
-    state_pack_enabled: true,
-    allocation_ok: config.allocation_ok,
-    ok: config.allocation_ok
+    evidence: evidence,
+    distributed: distributed,
+    state_pack_enabled: state_pack_enabled,
+    receipts_ok: receipt_chain_ok,
+    node_count_ok: node_count_ok,
+    node_params_ok: params_ok,
+    allocation_ok: allocation_ok,
+    ok: ok
   }
+}
+
+fn default_evidence(config) {
+  {
+    distributed: false,
+    state_pack_enabled: false,
+    receipts: []
+  }
+}
+
+fn cluster_report(config) {
+  cluster_report_from_evidence(config, default_evidence(config))
 }
 
 fn cluster_receipt(report) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.state_pack_cluster",
-    version: "phase6.0",
+    version: "phase6.1",
     report: report
   }))
 }
 
-fn cluster_with_receipt(config) {
-  let report = cluster_report(config) in
+fn cluster_with_evidence_and_receipt(config, evidence) {
+  let report = cluster_report_from_evidence(config, evidence) in
   let receipt = cluster_receipt(report) in
   { report: report, receipt: receipt }
+}
+
+fn cluster_with_receipt(config) {
+  cluster_with_evidence_and_receipt(config, default_evidence(config))
 }
 
 export {
   node_config,
   cluster_config,
   starter_cluster,
+  receipt_ok,
+  receipts_ok,
+  node_params_sum,
+  node_params_match_total,
+  cluster_report_from_evidence,
   cluster_report,
   cluster_receipt,
+  cluster_with_evidence_and_receipt,
   cluster_with_receipt
 }

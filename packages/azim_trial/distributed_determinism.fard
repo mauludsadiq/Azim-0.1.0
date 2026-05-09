@@ -1,6 +1,7 @@
 import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
+import("std/str") as str
 import("dual_receipt") as dual
 
 fn node_update(node_id, input_state, output_state, math_contract, impl_contract) {
@@ -20,8 +21,12 @@ fn node_update(node_id, input_state, output_state, math_contract, impl_contract)
   }
 }
 
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
 fn update_ok(update) {
-  (update.math_receipt != "") && (update.impl_receipt != "")
+  receipt_ok(update.math_receipt) && receipt_ok(update.impl_receipt)
 }
 
 fn all_updates_ok(updates) {

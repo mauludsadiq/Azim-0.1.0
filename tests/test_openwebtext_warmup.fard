@@ -16,15 +16,46 @@ test "warmup config records 1000 steps" {
   c.warmup_steps == 1000
 }
 
-test "warmup report returns record" {
-  let c = warmup.warmup_config(1000, 0.42) in
-  type.of(warmup.warmup_report(c)) == "record"
-}
-
-test "warmup report ok true" {
+test "warmup report defaults to not complete" {
   let c = warmup.warmup_config(1000, 0.42) in
   let r = warmup.warmup_report(c) in
+  r.ok == false
+}
+
+test "warmup evidence derives ok true" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  let e = {
+    observed_loss: 0.40,
+    validator_ok: true,
+    distributed_ok: true,
+    receipts: ["sha256:a", "sha256:b"]
+  } in
+  let r = warmup.warmup_report_from_evidence(c, e) in
   r.ok == true
+}
+
+test "warmup evidence rejects loss above target" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  let e = {
+    observed_loss: 0.50,
+    validator_ok: true,
+    distributed_ok: true,
+    receipts: ["sha256:a"]
+  } in
+  let r = warmup.warmup_report_from_evidence(c, e) in
+  r.loss_target_met == false && r.ok == false
+}
+
+test "warmup evidence rejects bad receipt" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  let e = {
+    observed_loss: 0.40,
+    validator_ok: true,
+    distributed_ok: true,
+    receipts: ["sha256:a", "bad"]
+  } in
+  let r = warmup.warmup_report_from_evidence(c, e) in
+  r.receipts_ok == false && r.ok == false
 }
 
 test "warmup receipt deterministic" {

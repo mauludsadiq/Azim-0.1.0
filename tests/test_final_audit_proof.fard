@@ -11,33 +11,49 @@ test "audit config records 1p5b params" {
   c.parameter_count == 1500000000.0
 }
 
-test "audit report returns record" {
-  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
-  type.of(proof.audit_report(c)) == "record"
-}
-
-test "audit lawful outputs true" {
+test "audit report defaults to not proven" {
   let c = proof.audit_config("azim_1p5b", 1500000000.0) in
   let r = proof.audit_report(c) in
-  r.lawful_outputs == true
+  r.ok == false
 }
 
-test "audit causal independence true" {
+test "audit evidence derives true report" {
   let c = proof.audit_config("azim_1p5b", 1500000000.0) in
-  let r = proof.audit_report(c) in
-  r.causal_independence_preserved == true
-}
-
-test "audit proof complete" {
-  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
-  let r = proof.audit_report(c) in
-  r.proof_complete == true
-}
-
-test "audit report ok true" {
-  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
-  let r = proof.audit_report(c) in
+  let e = {
+    lawful_outputs: true,
+    causal_independence_preserved: true,
+    leakage_score: 0.01,
+    receipts: ["sha256:a", "sha256:b"],
+    replay_verified: true
+  } in
+  let r = proof.audit_report_from_evidence(c, e) in
   r.ok == true
+}
+
+test "audit evidence rejects leakage above threshold" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  let e = {
+    lawful_outputs: true,
+    causal_independence_preserved: true,
+    leakage_score: 0.06,
+    receipts: ["sha256:a"],
+    replay_verified: true
+  } in
+  let r = proof.audit_report_from_evidence(c, e) in
+  r.leakage_below_threshold == false && r.ok == false
+}
+
+test "audit evidence rejects bad receipt chain" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  let e = {
+    lawful_outputs: true,
+    causal_independence_preserved: true,
+    leakage_score: 0.01,
+    receipts: ["sha256:a", "bad"],
+    replay_verified: true
+  } in
+  let r = proof.audit_report_from_evidence(c, e) in
+  r.receipt_chain_complete == false && r.ok == false
 }
 
 test "proof receipt deterministic" {

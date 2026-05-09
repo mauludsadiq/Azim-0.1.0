@@ -1,5 +1,6 @@
 import("std/json") as json
 import("std/hash") as hash
+import("std/str") as str
 
 fn math_receipt(operation, canonical_math) {
   hash.sha256_text(json.canonicalize({
@@ -29,9 +30,13 @@ fn dual_receipt(operation, canonical_math, implementation, runtime, output) {
   }
 }
 
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
 fn dual_ok(receipt_obj) {
-  (receipt_obj.math_receipt != "") &&
-  (receipt_obj.impl_receipt != "") &&
+  receipt_ok(receipt_obj.math_receipt) &&
+  receipt_ok(receipt_obj.impl_receipt) &&
   (receipt_obj.math_receipt != receipt_obj.impl_receipt)
 }
 
