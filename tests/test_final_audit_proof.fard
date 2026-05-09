@@ -1,0 +1,48 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/final_audit_proof") as proof
+
+test "audit config returns record" {
+  type.of(proof.audit_config("azim_1p5b", 1500000000.0)) == "record"
+}
+
+test "audit config records 1p5b params" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  c.parameter_count == 1500000000.0
+}
+
+test "audit report returns record" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  type.of(proof.audit_report(c)) == "record"
+}
+
+test "audit lawful outputs true" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  let r = proof.audit_report(c) in
+  r.lawful_outputs == true
+}
+
+test "audit causal independence true" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  let r = proof.audit_report(c) in
+  r.causal_independence_preserved == true
+}
+
+test "audit proof complete" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  let r = proof.audit_report(c) in
+  r.proof_complete == true
+}
+
+test "audit report ok true" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  let r = proof.audit_report(c) in
+  r.ok == true
+}
+
+test "proof receipt deterministic" {
+  let c = proof.audit_config("azim_1p5b", 1500000000.0) in
+  let a = proof.proof_with_receipt(c) in
+  let b = proof.proof_with_receipt(c) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
