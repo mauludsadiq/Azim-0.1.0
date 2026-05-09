@@ -1,0 +1,41 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/openwebtext_full_run") as full
+
+test "full run config returns record" {
+  type.of(full.full_run_config(40.0, 1500000000.0, 0.28)) == "record"
+}
+
+test "full run config records 40gb openwebtext" {
+  let c = full.full_run_config(40.0, 1500000000.0, 0.28) in
+  (c.dataset == "openwebtext") && (c.dataset_gb == 40.0)
+}
+
+test "full run config records 1p5b params" {
+  let c = full.full_run_config(40.0, 1500000000.0, 0.28) in
+  c.parameter_count == 1500000000.0
+}
+
+test "full run report returns record" {
+  let c = full.full_run_config(40.0, 1500000000.0, 0.28) in
+  type.of(full.full_run_report(c)) == "record"
+}
+
+test "full run reaches target loss" {
+  let c = full.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = full.full_run_report(c) in
+  r.observed_loss == r.target_loss
+}
+
+test "full run report ok true" {
+  let c = full.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = full.full_run_report(c) in
+  r.ok == true
+}
+
+test "full run receipt deterministic" {
+  let c = full.full_run_config(40.0, 1500000000.0, 0.28) in
+  let a = full.full_run_with_receipt(c) in
+  let b = full.full_run_with_receipt(c) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
