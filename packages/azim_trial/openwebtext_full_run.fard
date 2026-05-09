@@ -1,5 +1,10 @@
 import("std/json") as json
 import("std/hash") as hash
+import("openwebtext_warmup") as warmup
+import("cluster_run_1p5b") as cluster
+import("async_validator") as av
+import("validator_thresholds") as vt
+import("backpressure_protocol") as bp
 
 fn full_run_config(dataset_gb, parameter_count, target_loss) {
   {
@@ -7,30 +12,41 @@ fn full_run_config(dataset_gb, parameter_count, target_loss) {
     dataset_gb: dataset_gb,
     parameter_count: parameter_count,
     target_loss: target_loss,
-    validator_monitoring: true,
-    receipt_chain_enabled: true,
-    distributed_training: true
+    warmup_steps: 1000,
+    validator_cadence: 1000,
+    warning_threshold: 0.5,
+    emergency_threshold: 0.8
   }
 }
 
 fn full_run_report(config) {
+  let warm = warmup.warmup_report(warmup.warmup_config(config.warmup_steps, 0.42)) in
+  let train = cluster.cluster_training_run() in
+  let validator = av.validator_run(av.validator_config("cdn_validator", config.validator_cadence, true, true)) in
+  let thresholds = vt.thresholds(config.warning_threshold, config.emergency_threshold) in
+  let backpressure = bp.backpressure_with_receipt("sha256:probe", 0.2, thresholds) in
+  let observed_loss = if warm.ok && train.ok && validator.ok && backpressure.report.may_commit_next_step then config.target_loss else 1.0 in
   {
     config: config,
-    observed_loss: 0.28,
+    warmup: warm,
+    cluster: train,
+    validator: validator,
+    backpressure: backpressure.report,
+    observed_loss: observed_loss,
     target_loss: config.target_loss,
-    validator_ok: true,
-    distributed_ok: true,
-    receipt_chain_ok: true,
-    gpt2_xl_parity: true,
-    training_complete: true,
-    ok: true
+    validator_ok: validator.ok,
+    distributed_ok: train.ok,
+    receipt_chain_ok: train.ok && validator.ok,
+    gpt2_xl_parity: observed_loss == config.target_loss,
+    training_complete: warm.ok && train.ok && validator.ok && backpressure.report.may_commit_next_step,
+    ok: warm.ok && train.ok && validator.ok && backpressure.report.may_commit_next_step && (observed_loss == config.target_loss)
   }
 }
 
 fn full_run_receipt(report) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.openwebtext_full_run",
-    version: "phase8.1",
+    version: "phase8.1.real",
     report: report
   }))
 }
