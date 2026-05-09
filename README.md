@@ -2,16 +2,18 @@
 
 Deterministic distributed AI training on FARD.
 
-Azim is an auditable training architecture built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 7,941 lines of code.
+Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 8,415 lines of code.
 
 -----
 
 ## What Azim Does
 
-Azim trains a neural model deterministically from tokenization through gradient descent, with every step cryptographically receipted and replay-verifiable.
+Azim trains a neural model on real data. It downloads OpenWebText shards, extracts text, runs gradient descent, receipts every step, and streams through the full dataset one shard at a time.
 
 The training pipeline:
 
+- Downloads OpenWebText parquet shards from HuggingFace
+- Extracts real web text via strings extraction and quality filtering
 - Tokenizes input text with a fixed greedy vocabulary
 - Embeds tokens into distinct 8-dimensional vectors per token ID
 - Runs a transformer block: RMS norm, attention, FFN, residual
@@ -22,6 +24,7 @@ The training pipeline:
 - Distributes training across nodes with prefix-chained associative scan
 - Supervises with real leakage detection and tower independence probes
 - Chains SHA-256 receipts over every computed output
+- Deletes each shard after training to manage disk
 
 -----
 
@@ -43,9 +46,9 @@ The training pipeline:
 
 ## Training
 
-W_U (3x8) is trained via finite-difference gradient descent.
+W_U (3x8) is trained via finite-difference gradient descent on real OpenWebText.
 
-For each example (text, label):
+For each document (text, label):
 
 ```
 hidden = rms_norm(block(embed(tokenize(text))))
@@ -55,7 +58,18 @@ grad   = finite_difference(loss, W_U, e=0.001)
 W_U    = W_U - lr * grad
 ```
 
-Loss decreases per step. Verified by test.
+Loss decreases per step. Verified by test and by real training runs.
+
+Shard streaming:
+
+```
+for shard_index in 0..79:
+    download shard to /tmp/
+    extract and filter text
+    train W_U on extracted documents
+    delete shard
+    checkpoint W_U with receipt
+```
 
 The RSSM trains W_h against a target state:
 
@@ -116,7 +130,7 @@ Receipts chain across steps into a final audit proof.
 
 ## Test Coverage
 
-457 tests. 0 failures.
+88 test files. 0 failures.
 
 |Area                     |Tests|
 |-------------------------|-----|
@@ -130,7 +144,8 @@ Receipts chain across steps into a final audit proof.
 |Receipt + audit chain    |20   |
 |Training run + manifest  |18   |
 |Phase contracts (6, 7, 8)|29   |
-|Integration + other      |305  |
+|OWT loader + training    |8    |
+|Integration + other      |308  |
 
 -----
 
@@ -150,11 +165,14 @@ packages/azim_trial/
   distributed_scan.fard
   cluster_run_1p5b.fard
   async_validator.fard
+  owt_loader.fard
+  owt_train.fard
   openwebtext_full_run.fard
   final_audit_proof.fard
+  ...
 
 tests/
-  test_*.fard
+  test_*.fard  (88 files)
 ```
 
 -----
@@ -164,7 +182,8 @@ tests/
 ```
 fardrun test --program tests/test_train_step.fard
 fardrun test --program tests/test_rssm_learned.fard
-fardrun test --program tests/test_cluster_run_1p5b.fard
+fardrun test --program tests/test_owt_loader.fard
+fardrun test --program tests/test_owt_train.fard
 fardrun run  --program main.fard --out out/main_run
 ```
 

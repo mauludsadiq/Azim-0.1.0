@@ -1,0 +1,24 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/owt_loader") as loader
+
+test "extract texts returns list" {
+  let texts = loader.extract_shard_texts("/tmp/owt_0.parquet", 10, 100) in
+  type.of(texts) == "list"
+}
+
+test "extract gets meaningful texts" {
+  let texts = loader.extract_shard_texts("/tmp/owt_0.parquet", 10, 100) in
+  list.len(texts) > 10
+}
+
+test "shard to corpus returns examples" {
+  let examples = loader.shard_to_corpus("/tmp/owt_0.parquet", 10, 50) in
+  list.len(examples) > 10
+}
+
+test "corpus examples have text and label" {
+  let examples = loader.shard_to_corpus("/tmp/owt_0.parquet", 10, 50) in
+  let first = list.get(examples, 0) in
+  first.label == "accepted"
+}

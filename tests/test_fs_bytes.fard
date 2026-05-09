@@ -1,0 +1,5 @@
+import("std/fs") as fs
+import("std/bytes") as b
+
+let raw = fs.read_bytes("/tmp/owt_0.parquet")
+{ ok: raw != null, type: "done" }

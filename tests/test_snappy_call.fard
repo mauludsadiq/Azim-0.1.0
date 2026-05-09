@@ -1,0 +1,16 @@
+import("std/ffi") as ffi
+import("std/bytes") as b
+import("std/io") as io
+
+let lib = ffi.open("/opt/homebrew/lib/libsnappy.dylib")
+
+fn snappy_uncompressed_length(compressed) {
+  ffi.call(lib, "snappy_uncompressed_length", [compressed])
+}
+
+fn snappy_uncompress(compressed) {
+  ffi.call(lib, "snappy_uncompress", [compressed])
+}
+
+let raw = io.read_file("/tmp/owt_0.parquet")
+{ lib_ok: lib.t == "ok", raw_type: raw }

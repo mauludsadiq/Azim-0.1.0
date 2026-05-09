@@ -1,0 +1,4 @@
+import("std/process") as process
+
+let result = process.capture("echo", ["hello world"])
+result

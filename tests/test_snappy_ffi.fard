@@ -1,0 +1,5 @@
+import("std/ffi") as ffi
+import("std/bytes") as b
+
+let lib = ffi.open("/opt/homebrew/lib/libsnappy.dylib")
+lib

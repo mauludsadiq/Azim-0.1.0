@@ -1,0 +1,5 @@
+import("std/process") as process
+import("std/bytes") as b
+
+let result = process.capture("dd", ["if=/tmp/owt_0.parquet", "bs=1", "count=64", "status=none"])
+{ ok: result.ok, stdout_len: b.len(b.of_str(result.stdout)) }

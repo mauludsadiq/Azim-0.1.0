@@ -1,0 +1,17 @@
+import("std/io") as io
+import("std/type") as type
+
+test "read file returns text" {
+  let result = io.read_file("/tmp/test_input.txt") in
+  type.of(result.ok) == "text"
+}
+
+test "read file content correct" {
+  let result = io.read_file("/tmp/test_input.txt") in
+  result.ok == "the sky is blue\n"
+}
+
+test "read lines returns list" {
+  let result = io.read_lines("/tmp/test_input.txt") in
+  type.of(result.ok) == "list"
+}

@@ -1,0 +1,5 @@
+import("std/io") as io
+import("../../packages/parquet-core/src") as parquet
+
+let result = parquet.read("/tmp/owt_0.parquet")
+result

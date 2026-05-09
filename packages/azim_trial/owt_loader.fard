@@ -1,0 +1,40 @@
+import("std/process") as process
+import("std/io") as io
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+
+fn extract_shard_texts(parquet_path, min_words, max_docs) {
+  let raw = process.capture("strings", ["-n", "40", parquet_path]) in
+  let lines = str.split_lines(raw.stdout) in
+  let filtered = list.filter(lines, fn(line) {
+    let words = str.split(line, " ") in
+    list.len(words) >= min_words &&
+    str.len(line) >= 80 &&
+    str.len(line) <= 2000
+  }) in
+  list.take(filtered, max_docs)
+}
+
+fn download_shard(shard_index, out_path) {
+  let url = str.concat([
+    "https://huggingface.co/api/datasets/Skylion007/openwebtext/parquet/plain_text/train/",
+    str.from(shard_index),
+    ".parquet"
+  ]) in
+  process.capture("curl", ["-L", "-o", out_path, "-s", url])
+}
+
+fn shard_to_corpus(parquet_path, min_words, max_docs) {
+  let texts = extract_shard_texts(parquet_path, min_words, max_docs) in
+  list.map(texts, fn(text) {
+    { text: text, label: "accepted", parameter_id: "W_U" }
+  })
+}
+
+fn delete_shard(path) {
+  process.capture("rm", ["-f", path])
+}
+
+export { extract_shard_texts, download_shard, shard_to_corpus, delete_shard }

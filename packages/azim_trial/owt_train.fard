@@ -1,0 +1,75 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/io") as io
+import("owt_loader") as loader
+import("train_step") as train
+import("weights") as weights
+import("receipts") as receipts
+
+fn is_clean(text) {
+  let words = str.split(text, " ") in
+  let long_enough = list.len(words) >= 15 in
+  let short_enough = str.len(text) <= 1000 in
+  let no_artifacts = str.contains(text, " ") &&
+    (str.contains(text, ".") || str.contains(text, ",")) in
+  long_enough && short_enough && no_artifacts
+}
+
+fn train_on_texts(W_U, texts, lr) {
+  list.fold(texts, { W_U: W_U, steps: 0, losses: [] }, fn(acc, text) {
+    if is_clean(text) then
+      let step = train.train_step(acc.W_U, text, "accepted", lr) in
+      {
+        W_U: step.updated_W_U,
+        steps: acc.steps + 1,
+        losses: list.append(acc.losses, step.loss_before)
+      }
+    else acc
+  })
+}
+
+fn avg_loss(losses) {
+  if list.len(losses) == 0 then 0.0 else
+  list.fold(losses, 0.0, fn(acc, x) { acc + x }) / list.len(losses)
+}
+
+fn train_shard(shard_index, W_U, lr, max_docs) {
+  let shard_path = str.concat(["/tmp/owt_shard_", str.from(shard_index), ".parquet"]) in
+  let download = loader.download_shard(shard_index, shard_path) in
+  let texts = loader.extract_shard_texts(shard_path, 15, max_docs) in
+  let result = train_on_texts(W_U, texts, lr) in
+  let _ = loader.delete_shard(shard_path) in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.owt_train",
+    version: "1.0.0",
+    shard_index: shard_index,
+    steps: result.steps,
+    avg_loss: avg_loss(result.losses)
+  })) in
+  {
+    shard_index: shard_index,
+    steps: result.steps,
+    avg_loss: avg_loss(result.losses),
+    W_U: result.W_U,
+    receipt: receipt
+  }
+}
+
+fn train_shards(shard_indices, W_U, lr, max_docs_per_shard) {
+  list.fold(shard_indices, { W_U: W_U, history: [] }, fn(acc, idx) {
+    let result = train_shard(idx, acc.W_U, lr, max_docs_per_shard) in
+    {
+      W_U: result.W_U,
+      history: list.append(acc.history, {
+        shard: result.shard_index,
+        steps: result.steps,
+        avg_loss: result.avg_loss,
+        receipt: result.receipt
+      })
+    }
+  })
+}
+
+export { is_clean, train_on_texts, avg_loss, train_shard, train_shards }

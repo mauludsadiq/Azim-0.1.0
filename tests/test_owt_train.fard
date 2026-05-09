@@ -1,0 +1,24 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/weights") as weights
+import("../packages/azim_trial/owt_loader") as loader
+import("../packages/azim_trial/owt_train") as owt
+
+test "is_clean accepts good text" {
+  owt.is_clean("The sky is blue and the grass is green on a warm summer day in the park.") == true
+}
+
+test "is_clean rejects short text" {
+  owt.is_clean("short text") == false
+}
+
+test "train on texts returns record" {
+  let texts = loader.extract_shard_texts("/tmp/owt_0.parquet", 15, 20) in
+  type.of(owt.train_on_texts(weights.W_U, texts, 0.001)) == "record"
+}
+
+test "train on texts updates W_U" {
+  let texts = loader.extract_shard_texts("/tmp/owt_0.parquet", 15, 5) in
+  let result = owt.train_on_texts(weights.W_U, texts, 0.001) in
+  result.steps > 0
+}
