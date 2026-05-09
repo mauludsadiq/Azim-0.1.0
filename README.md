@@ -431,6 +431,6 @@ Final system invariant:
 
 text id="azim_inv_19" every model state transition is mathematically accountable 
 
-#License
+# License
 
 MUI
