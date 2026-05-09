@@ -2,435 +2,174 @@
 
 Deterministic distributed AI training on FARD.
 
-Azim is a fully auditable large-model training architecture built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints.
+Azim is an auditable training architecture built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 7,941 lines of code.
 
-The system demonstrates that GPT-scale training can be:
+-----
 
-- deterministic
-- replay-verifiable
-- cryptographically auditable
-- validator-supervised
-- leakage-monitored
-- causally constrained
-- distributed without nondeterministic all-reduce behavior
+## What Azim Does
 
-Azim executes entirely as structured deterministic computation over FARD.
+Azim trains a neural model deterministically from tokenization through gradient descent, with every step cryptographically receipted and replay-verifiable.
 
----
+The training pipeline:
 
-# Core Thesis
+- Tokenizes input text with a fixed greedy vocabulary
+- Embeds tokens into distinct 8-dimensional vectors per token ID
+- Runs a transformer block: RMS norm, attention, FFN, residual
+- Computes NLL loss over three-class label logits
+- Computes finite-difference gradients over W_U against the real loss
+- Updates W_U via SGD with verified loss decrease per step
+- Trains RSSM transition matrices with convergence verification
+- Distributes training across nodes with prefix-chained associative scan
+- Supervises with real leakage detection and tower independence probes
+- Chains SHA-256 receipts over every computed output
 
-Modern LLM training systems are fundamentally non-auditable.
+-----
 
-Standard training pipelines suffer from:
+## Architecture
 
-- nondeterministic distributed updates
-- irreproducible optimizer behavior
-- unverifiable gradient paths
-- hidden leakage
-- opaque interpretability
-- untracked distributed race conditions
-- impossible replay guarantees
+|Phase|Description                                                               |
+|-----|--------------------------------------------------------------------------|
+|0    |Deterministic Runtime (FARD)                                              |
+|1    |Aware-Tower — semantic realization with lawful output constraints         |
+|2    |RSSM + Associative Scan — learned state evolution, distributed prefix scan|
+|3    |Gradient Oracle — finite-difference gradients over real NLL loss          |
+|4    |Dual-Receipt Protocol — math and impl receipts independently auditable    |
+|5    |Dynamic Basis Expansion — cosine similarity monitoring, expansion events  |
+|6    |Distributed Training — three-node cluster with real RSSM train steps      |
+|7    |Async Validator — leakage probe, tower independence, backpressure control |
+|8    |Full Run + Audit Proof — end-to-end receipt chain with final proof        |
 
-Azim replaces probabilistic infrastructure assumptions with deterministic execution receipts.
+-----
 
-Invariant:
+## Training
 
-text id="azim_inv_01" every training step must be cryptographically replay-verifiable 
+W_U (3x8) is trained via finite-difference gradient descent.
 
----
+For each example (text, label):
 
-# Architecture Overview
+```
+hidden = rms_norm(block(embed(tokenize(text))))
+logits = W_U . hidden
+loss   = NLL(logits, label)
+grad   = finite_difference(loss, W_U, e=0.001)
+W_U    = W_U - lr * grad
+```
 
-Azim consists of eight sequential phases.
+Loss decreases per step. Verified by test.
 
-| Phase | Description | Status |
-|---|---|---|
-| Phase 0 | Deterministic Runtime | ✓ |
-| Phase 1 | Aware-Tower | ✓ |
-| Phase 2 | RSSM + Associative Scan | ✓ |
-| Phase 3 | Gradient Oracle | ✓ |
-| Phase 4 | Dual-Receipt Protocol | ✓ |
-| Phase 5 | Dynamic Basis Expansion | ✓ |
-| Phase 6 | Distributed Training + State Pack CDN | ✓ |
-| Phase 7 | Async Validator + Sidechain | ✓ |
-| Phase 8 | OpenWebText Run + Final Proof | ✓ |
+The RSSM trains W_h against a target state:
 
----
+```
+s_{t+1} = relu(W_h . s_t + W_x . x_t)
+loss    = ||s_T - target||^2
+grad    = finite_difference(loss, W_h, e=0.001)
+W_h     = W_h - lr * grad
+```
 
-# Phase 0 — Deterministic Runtime
+Convergence verified over multiple steps by test.
 
-Azim executes on top of FARD.
+-----
 
-FARD guarantees:
+## Distributed Scan
 
-- deterministic execution
-- canonical serialization
-- receipt generation
-- replay verification
-- stable hashing
-- pure-function evaluation
+Three nodes chain state across partitions:
 
-Core runtime invariant:
+```
+node-1: s_0 -> s_1 = transition(batch[0], s_0)
+node-2: s_1 -> s_2 = transition(batch[1], s_1)
+node-3: s_2 -> s_3 = transition(batch[2], s_2)
+```
 
-text id="azim_inv_02" identical inputs must produce identical outputs and identical receipts 
+s_3 is bit-identical to sequential execution. Verified by test.
 
----
+-----
 
-# Phase 1 — Aware-Tower
+## Validator
 
-Aware-Tower separates semantic realization from statistical prediction.
+Three real probes run every 1000 steps:
 
-Tower structure:
+|Probe       |Method                             |
+|------------|-----------------------------------|
+|Leakage     |RSSM/Tower bridge score comparison |
+|Independence|Tower layer zeroing stability check|
+|Receipt     |SHA-256 prefix verification        |
 
-| Layer | Purpose |
-|---|---|
-| RSSM | latent world-state evolution |
-| Tower | semantic realization |
-| Validator | lawful output enforcement |
+Backpressure: ok continues, warning adjusts, emergency pauses.
 
-Invariant:
+-----
 
-text id="azim_inv_03" semantic realization remains causally constrained 
+## Receipts
 
----
+Every computation emits a SHA-256 receipt over canonical JSON:
 
-# Phase 2 — RSSM + Associative Scan
-
-Azim replaces sequential recurrence bottlenecks using associative scan execution.
-
-Implemented:
-
-- RSSM state evolution
-- associative parallel scan
-- deterministic state folding
-- distributed equivalence validation
-
-Complexity target:
-
-text id="azim_inv_04" O(log N) distributed communication 
-
-Distributed scan outputs remain bit-identical to sequential execution.
-
----
-
-# Phase 3 — Gradient Oracle
-
-The Gradient Oracle introduces structured gradient verification.
-
-Implemented systems:
-
-- gradient contracts
-- oracle verification
-- hybrid deterministic gradient checking
-- receipt-linked optimization traces
-
-Invariant:
-
-text id="azim_inv_05" optimizer updates require cryptographic validation 
-
----
-
-# Phase 4 — Dual-Receipt Protocol
-
-Every execution step generates two linked receipts.
-
-| Receipt | Purpose |
-|---|---|
-| math_receipt | mathematical validity |
-| impl_receipt | implementation execution |
-
-The dual-receipt system separates abstract correctness from implementation behavior.
-
-Invariant:
-
-text id="azim_inv_06" mathematical validity and implementation traces remain independently auditable 
-
----
-
-# Phase 5 — Dynamic Basis Expansion
-
-Azim dynamically expands representational basis size during training.
-
-Expansion chain:
-
-text id="azim_inv_07" 8 -> 16 -> 32 
-
-Expansion behavior:
-
-- cosine similarity monitoring
-- expansion trigger detection
-- basis growth validation
-- stability verification
-- graph-linked expansion events
-
-Expansion events are appended into the deterministic module graph.
-
-Stability invariant:
-
-text id="azim_inv_08" basis expansion must not introduce destabilizing loss spikes 
-
----
-
-# Phase 6 — Distributed Training + State Pack CDN
-
-Azim scales deterministically across distributed nodes.
-
-Cluster configuration:
-
-| Property | Value |
-|---|---|
-| Nodes | 3 |
-| Parameters | 1.5B |
-| Distribution | RSSM/RSSM/Tower |
-
-Implemented systems:
-
-- State Pack CDN
-- distributed determinism
-- deterministic node updates
-- distributed associative scan
-- replay-verifiable merge digests
-- 1.5B distributed training simulation
-
-Invariant:
-
-text id="azim_inv_09" distributed execution must remain deterministic across all nodes 
-
-No nondeterministic all-reduce behavior exists inside the cluster.
-
----
-
-# Phase 7 — Async Validator + Sidechain
-
-Azim introduces independent asynchronous supervision.
-
-Validator capabilities:
-
-- leakage monitoring
-- independence validation
-- lawfulness verification
-- backpressure control
-- emergency halt signaling
-
-Validator cadence:
-
-text id="azim_inv_10" 1000-step asynchronous probe intervals 
-
-Three-axis probe suite:
-
-| Probe | Purpose |
-|---|---|
-| Independence | RSSM/Tower separation |
-| Leakage | contamination monitoring |
-| Lawfulness | realization constraints |
-
----
-
-## Warning / Emergency Thresholds
-
-Validator states:
-
-| State | Action |
-|---|---|
-| ok | continue |
-| warning | automatic FiLM adjustment |
-| emergency | pause training |
-
-Invariant:
-
-text id="azim_inv_11" no unchecked update may enter the training chain 
-
----
-
-## Forensic Sidechain
-
-Azim separates verification from interpretability.
-
-| Chain | Purpose |
-|---|---|
-| Main Chain | mathematical verification |
-| Sidechain | forensic interpretability |
-
-The Sidechain stores:
-
-- validator checkpoints
-- impl_receipts
-- probe_receipts
-- interpretability metadata
-- deviation traces
-
-Invariant:
-
-text id="azim_inv_12" verification purity and interpretability remain isolated 
-
----
-
-## 1GB Integration Test
-
-The full system executes end-to-end over a unified integration corpus.
-
-Integrated systems:
-
-- tiled matmul
-- associative scan
-- basis expansion
-- dual-receipt protocol
-- validator supervision
-- State Pack CDN
-- forensic sidechain
-
-Verified properties:
-
-| Property | Status |
-|---|---|
-| no deadlocks | ✓ |
-| deterministic replay | ✓ |
-| validator continuity | ✓ |
-| distributed consistency | ✓ |
-
-Invariant:
-
-text id="azim_inv_13" distributed execution plus validator supervision remains deadlock-free 
-
----
-
-# Phase 8 — OpenWebText Run + Final Proof
-
-Azim completes full GPT-scale deterministic training.
-
-Training configuration:
-
-| Property | Value |
-|---|---|
-| Dataset | 40GB OpenWebText |
-| Parameters | 1.5B |
-| Target Loss | ~0.28 |
-| Validator Monitoring | ✓ |
-| Distributed Receipts | ✓ |
-
----
-
-## Pre-flight Calibration
-
-OpenWebText warmup executed successfully.
-
-Warmup configuration:
-
-| Property | Value |
-|---|---|
-| Warmup Steps | 1,000 |
-| Validator Enabled | ✓ |
-| Distributed Enabled | ✓ |
-
-Invariant:
-
-text id="azim_inv_14" system calibration must complete before full-scale training 
-
----
-
-## Full Training Run
-
-Azim completes GPT-2 XL scale training deterministically.
-
-Verified properties:
-
-| Property | Status |
-|---|---|
-| Target Loss Reached | ✓ |
-| GPT-2 XL Parity | ✓ |
-| Validator Continuity | ✓ |
-| Distributed Consistency | ✓ |
-| Receipt Determinism | ✓ |
-
-Core invariant:
-
-text id="azim_inv_15" every distributed training step remains replay-verifiable 
-
----
-
-## Final Audit + The Proof
-
-The final audit validates the complete execution chain.
-
-Verified:
-
-| Property | Status |
-|---|---|
-| lawful outputs | ✓ |
-| causal independence preserved | ✓ |
-| leakage below threshold | ✓ |
-| receipt chain complete | ✓ |
-| replay verification | ✓ |
-| GPT-scale reproducibility | ✓ |
-
-Proof artifacts include:
-
-- complete receipt chain
-- validator history
-- leakage audit
-- causal independence verification
-- deterministic replay proof
-
-Final invariant:
-
-text id="azim_inv_16" AI training can be fully deterministic, auditable, and replay-verifiable at scale 
-
----
-
-# Verification Coverage
-
-| Phase | Tests |
-|---|---|
-| Phase 5 | 18 |
-| Phase 6 | 26 |
-| Phase 7 | 34 |
-| Phase 8 | 21 |
-
-Total deterministic tests:
-
-text id="azim_inv_17" 99 deterministic tests passed 
-
----
-
-# Key Properties
-
-Azim demonstrates:
-
-- deterministic distributed training
-- replay-verifiable optimization
-- validator-supervised execution
-- leakage-constrained realization
-- lawful semantic outputs
-- cryptographic execution receipts
-- distributed causal consistency
-- GPT-scale auditability
-
----
-
-# Repository Structure
-
-text id="azim_inv_18" packages/azim_trial/   aware_tower.fard   rssm.fard   associative_scan.fard   gradient_oracle.fard   dual_receipt.fard   basis_expansion.fard   distributed_scan.fard   async_validator.fard   forensic_sidechain.fard   openwebtext_full_run.fard   final_audit_proof.fard  tests/   test_*.fard 
-
----
-
-# Final Result
-
-Azim proves that large-scale AI training does not require probabilistic infrastructure assumptions.
-
-Training can instead be:
-
-- deterministic
-- cryptographically auditable
-- replay-verifiable
-- validator-supervised
-- causally constrained
-- leakage-monitored
-
-Final system invariant:
-
-text id="azim_inv_19" every model state transition is mathematically accountable 
-
-# License
+```
+receipt = sha256(canonicalize({
+  component: "...",
+  version:   "...",
+  output:    <actual computed output>
+}))
+```
+
+Receipts chain across steps into a final audit proof.
+
+-----
+
+## Test Coverage
+
+457 tests. 0 failures.
+
+|Area                     |Tests|
+|-------------------------|-----|
+|Tensor core              |14   |
+|Tokenizer                |9    |
+|Attention + FFN          |10   |
+|Loss + Gradients         |14   |
+|RSSM (fixed + learned)   |12   |
+|Distributed scan         |12   |
+|Validator + backpressure |14   |
+|Receipt + audit chain    |20   |
+|Training run + manifest  |18   |
+|Phase contracts (6, 7, 8)|29   |
+|Integration + other      |305  |
+
+-----
+
+## Repository Structure
+
+```
+packages/azim_trial/
+  tensor.fard
+  weights.fard
+  embedding.fard
+  attention.fard
+  block.fard
+  loss.fard
+  finite_difference_gradient.fard
+  train_step.fard
+  rssm.fard
+  distributed_scan.fard
+  cluster_run_1p5b.fard
+  async_validator.fard
+  openwebtext_full_run.fard
+  final_audit_proof.fard
+
+tests/
+  test_*.fard
+```
+
+-----
+
+## Running
+
+```
+fardrun test --program tests/test_train_step.fard
+fardrun test --program tests/test_rssm_learned.fard
+fardrun test --program tests/test_cluster_run_1p5b.fard
+fardrun run  --program main.fard --out out/main_run
+```
+
+-----
+
+## License
 
 MUI
