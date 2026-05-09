@@ -23,3 +23,21 @@ test "softmax length stable" {
   let s = tensor.softmax(v) in
   list.len(s.data) == 3
 }
+
+test "tensor valid shape true" {
+  tensor.valid_shape([2, 2], [1.0, 2.0, 3.0, 4.0]) == true
+}
+
+test "tensor valid shape false" {
+  tensor.valid_shape([2, 2], [1.0, 2.0, 3.0]) == false
+}
+
+test "tensor constructor records valid true" {
+  let t = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  t.valid == true
+}
+
+test "tensor constructor records valid false" {
+  let t = tensor.tensor([2, 2], [1.0, 2.0, 3.0]) in
+  t.valid == false
+}

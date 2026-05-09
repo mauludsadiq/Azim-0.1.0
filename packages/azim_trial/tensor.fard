@@ -5,8 +5,16 @@ import("std/float") as float
 import("std/json") as json
 import("std/hash") as hash
 
+fn prod(xs) {
+  list.fold(xs, 1, fn(acc, x) { acc * x })
+}
+
+fn valid_shape(dims, data) {
+  prod(dims) == list.len(data)
+}
+
 fn tensor(dims, data) {
-  { dims: dims, data: data }
+  { dims: dims, data: data, valid: valid_shape(dims, data) }
 }
 
 fn len(t) {
@@ -133,4 +141,4 @@ fn digest(t) {
   hash.sha256_text(json.canonicalize(t))
 }
 
-export { tensor, len, shape, zeros, vector, matrix, get1, get2, set1, map, zip_with, add, sub, scale, dot, row, col, matvec, matmul, relu, silu_scalar, silu, rms_norm, softmax, argmax, digest }
+export { prod, valid_shape, tensor, len, shape, zeros, vector, matrix, get1, get2, set1, map, zip_with, add, sub, scale, dot, row, col, matvec, matmul, relu, silu_scalar, silu, rms_norm, softmax, argmax, digest }
