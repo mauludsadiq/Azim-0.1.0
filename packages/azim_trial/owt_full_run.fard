@@ -1,0 +1,31 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("owt_train") as owt
+import("owt_checkpoint") as ckpt
+import("weights") as weights
+
+fn run_shard(shard_index, W_U, lr, max_docs) {
+  let result = owt.train_shard(shard_index, W_U, lr, max_docs) in
+  let _ = ckpt.save_checkpoint(result.W_U, shard_index, result.avg_loss, result.receipt) in
+  result
+}
+
+fn full_run(shard_count, lr, max_docs_per_shard) {
+  let indices = list.range(0, shard_count) in
+  list.fold(indices, { W_U: weights.W_U, history: [] }, fn(acc, idx) {
+    let result = run_shard(idx, acc.W_U, lr, max_docs_per_shard) in
+    {
+      W_U: result.W_U,
+      history: list.append(acc.history, {
+        shard: result.shard_index,
+        steps: result.steps,
+        avg_loss: result.avg_loss,
+        receipt: result.receipt
+      })
+    }
+  })
+}
+
+export { run_shard, full_run }

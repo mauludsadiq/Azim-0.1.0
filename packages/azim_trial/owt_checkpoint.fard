@@ -1,0 +1,29 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/fs") as fs
+import("std/str") as str
+import("tensor") as tensor
+
+fn save(W_U, shard_index, avg_loss, receipt, path) {
+  let record = {
+    version: "1.0.0",
+    shard_index: shard_index,
+    avg_loss: avg_loss,
+    receipt: receipt,
+    W_U_dims: W_U.dims,
+    W_U_data: W_U.data
+  } in
+  fs.write_text(path, json.canonicalize(record))
+}
+
+fn checkpoint_path(shard_index) {
+  str.concat(["/tmp/azim_checkpoint_shard_", str.from(shard_index), ".json"])
+}
+
+fn save_checkpoint(W_U, shard_index, avg_loss, receipt) {
+  let path = checkpoint_path(shard_index) in
+  let _ = save(W_U, shard_index, avg_loss, receipt, path) in
+  { saved: true, path: path }
+}
+
+export { save, checkpoint_path, save_checkpoint }

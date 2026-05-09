@@ -1,20 +1,50 @@
 import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
+import("std/str") as str
 import("tensor") as tensor
 import("loss") as loss
+import("logits") as logits
 import("optimizer") as opt
-import("finite_difference_gradient") as fdg
 import("weights") as weights
 
+fn spsa_direction(W_U, seed) {
+  let n = list.len(W_U.data) in
+  tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1),
+    list.build(n, fn(i) {
+      let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+      let c = str.slice(h, 7, 8) in
+      if c == "0" || c == "1" || c == "2" || c == "3" ||
+         c == "4" || c == "5" || c == "6" || c == "7"
+      then 1.0 else -1.0
+    })
+  )
+}
+
+fn spsa_gradient(W_U, hidden, target_label, epsilon) {
+  let n = list.len(W_U.data) in
+  let seed = hash.sha256_text(json.canonicalize({ w0: list.get(W_U.data, 0) })) in
+  let d = spsa_direction(W_U, seed) in
+  let W_plus = tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1),
+    list.build(n, fn(i) { list.get(W_U.data, i) + epsilon * list.get(d.data, i) })) in
+  let W_minus = tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1),
+    list.build(n, fn(i) { list.get(W_U.data, i) - epsilon * list.get(d.data, i) })) in
+  let l_plus  = loss.nll_from_logits(tensor.matvec(W_plus,  hidden), target_label) in
+  let l_minus = loss.nll_from_logits(tensor.matvec(W_minus, hidden), target_label) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1),
+    list.build(n, fn(i) { scale * list.get(d.data, i) }))
+}
+
 fn train_step(W_U, input_text, target_label, lr) {
-  let loss_before = loss.loss_for_text(input_text, target_label) in
-  let grad = fdg.finite_gradient_W_U(W_U, input_text, target_label, 0.001) in
-  let grad_flat = tensor.vector(grad.data) in
-  let W_U_flat = tensor.vector(W_U.data) in
-  let opt_step = opt.optimizer_step(W_U_flat, grad_flat, lr) in
-  let W_U_updated = tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1), opt_step.after.data) in
-  let loss_after = fdg.nll_with_W_U(W_U_updated, input_text, target_label) in
+  let hidden = logits.hidden_for_text(input_text) in
+  let loss_before = loss.nll_from_logits(tensor.matvec(W_U, hidden), target_label) in
+  let grad = spsa_gradient(W_U, hidden, target_label, 0.001) in
+  let flat_W = tensor.vector(W_U.data) in
+  let flat_g = tensor.vector(grad.data) in
+  let updated_flat = tensor.sub(flat_W, tensor.scale(flat_g, lr)) in
+  let W_U_updated = tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1), updated_flat.data) in
+  let loss_after = loss.nll_from_logits(tensor.matvec(W_U_updated, hidden), target_label) in
   {
     input_text: input_text,
     target_label: target_label,
@@ -29,7 +59,7 @@ fn train_step(W_U, input_text, target_label, lr) {
 fn train_step_receipt(step) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.train_step",
-    version: "3.0.0",
+    version: "4.0.0",
     step: step
   }))
 }
@@ -53,4 +83,4 @@ fn multi_step(W_U, examples, lr, steps) {
   })
 }
 
-export { train_step, train_step_receipt, train_step_with_receipt, multi_step }
+export { spsa_direction, spsa_gradient, train_step, train_step_receipt, train_step_with_receipt, multi_step }

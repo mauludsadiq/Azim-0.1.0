@@ -6,7 +6,6 @@ import("std/io") as io
 import("owt_loader") as loader
 import("train_step") as train
 import("weights") as weights
-import("receipts") as receipts
 
 fn is_clean(text) {
   let words = str.split(text, " ") in
@@ -17,10 +16,16 @@ fn is_clean(text) {
   long_enough && short_enough && no_artifacts
 }
 
+fn truncate(text, max_chars) {
+  if str.len(text) <= max_chars then text
+  else str.slice(text, 0, max_chars)
+}
+
 fn train_on_texts(W_U, texts, lr) {
   list.fold(texts, { W_U: W_U, steps: 0, losses: [] }, fn(acc, text) {
     if is_clean(text) then
-      let step = train.train_step(acc.W_U, text, "accepted", lr) in
+      let short = truncate(text, 120) in
+      let step = train.train_step(acc.W_U, short, "accepted", lr) in
       {
         W_U: step.updated_W_U,
         steps: acc.steps + 1,
@@ -43,7 +48,7 @@ fn train_shard(shard_index, W_U, lr, max_docs) {
   let _ = loader.delete_shard(shard_path) in
   let receipt = hash.sha256_text(json.canonicalize({
     component: "azim_trial.owt_train",
-    version: "1.0.0",
+    version: "1.1.0",
     shard_index: shard_index,
     steps: result.steps,
     avg_loss: avg_loss(result.losses)
@@ -72,4 +77,4 @@ fn train_shards(shard_indices, W_U, lr, max_docs_per_shard) {
   })
 }
 
-export { is_clean, train_on_texts, avg_loss, train_shard, train_shards }
+export { is_clean, truncate, train_on_texts, avg_loss, train_shard, train_shards }

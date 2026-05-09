@@ -1,0 +1,7 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/owt_full_run") as run
+
+test "run shard returns record" {
+  type.of(run.run_shard(0, null, 0.001, 5)) == "record"
+}
