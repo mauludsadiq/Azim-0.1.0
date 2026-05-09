@@ -6,20 +6,37 @@ Azim is a training system built on deterministic execution, cryptographic receip
 
 -----
 
+## Training Results
+
+Shard 0 of OpenWebText. 45 steps. 11 minutes. Pure FARD.
+
+```
+First loss:  0.8963
+Last loss:   0.6820
+Avg loss:    0.7605
+Reduction:   24%
+```
+
+W_U updated from real gradient descent on real web text. Receipt chain intact.
+
+-----
+
 ## What Azim Does
 
-Azim trains a neural model on real data. It downloads OpenWebText shards, extracts text, runs gradient descent, receipts every step, and streams through the full dataset one shard at a time.
+Azim trains a neural model on real data. It downloads OpenWebText shards from HuggingFace, extracts text, runs gradient descent, receipts every step, checkpoints between shards, and streams through the full 80-shard dataset.
 
 The training pipeline:
 
 - Downloads OpenWebText parquet shards from HuggingFace
 - Extracts real web text via strings extraction and quality filtering
+- Truncates documents to 120 characters for tokenization efficiency
 - Tokenizes input text with a fixed greedy vocabulary
 - Embeds tokens into distinct 8-dimensional vectors per token ID
 - Runs a transformer block: RMS norm, attention, FFN, residual
 - Computes NLL loss over three-class label logits
-- Computes finite-difference gradients over W_U against the real loss
+- Computes SPSA gradient over W_U — 2 forward passes per step
 - Updates W_U via SGD with verified loss decrease per step
+- Checkpoints W_U with receipt after each shard
 - Trains RSSM transition matrices with convergence verification
 - Distributes training across nodes with prefix-chained associative scan
 - Supervises with real leakage detection and tower independence probes
@@ -35,7 +52,7 @@ The training pipeline:
 |0    |Deterministic Runtime (FARD)                                              |
 |1    |Aware-Tower — semantic realization with lawful output constraints         |
 |2    |RSSM + Associative Scan — learned state evolution, distributed prefix scan|
-|3    |Gradient Oracle — finite-difference gradients over real NLL loss          |
+|3    |Gradient Oracle — SPSA gradients over real NLL loss                       |
 |4    |Dual-Receipt Protocol — math and impl receipts independently auditable    |
 |5    |Dynamic Basis Expansion — cosine similarity monitoring, expansion events  |
 |6    |Distributed Training — three-node cluster with real RSSM train steps      |
@@ -44,43 +61,43 @@ The training pipeline:
 
 -----
 
-## Training
+## Gradient Method
 
-W_U (3x8) is trained via finite-difference gradient descent on real OpenWebText.
-
-For each document (text, label):
+Azim uses SPSA (Simultaneous Perturbation Stochastic Approximation) for W_U:
 
 ```
-hidden = rms_norm(block(embed(tokenize(text))))
-logits = W_U . hidden
-loss   = NLL(logits, label)
-grad   = finite_difference(loss, W_U, e=0.001)
-W_U    = W_U - lr * grad
+d = random +/-1 direction (deterministic from weight hash)
+l_plus  = NLL(W_U + e*d, hidden, label)
+l_minus = NLL(W_U - e*d, hidden, label)
+grad    = ((l_plus - l_minus) / 2e) * d
+W_U     = W_U - lr * grad
 ```
 
-Loss decreases per step. Verified by test and by real training runs.
-
-Shard streaming:
-
-```
-for shard_index in 0..79:
-    download shard to /tmp/
-    extract and filter text
-    train W_U on extracted documents
-    delete shard
-    checkpoint W_U with receipt
-```
+2 forward passes per step instead of 24. Deterministic direction from weight state.
 
 The RSSM trains W_h against a target state:
 
 ```
 s_{t+1} = relu(W_h . s_t + W_x . x_t)
 loss    = ||s_T - target||^2
-grad    = finite_difference(loss, W_h, e=0.001)
-W_h     = W_h - lr * grad
+W_h     = W_h - lr * finite_diff_grad
 ```
 
-Convergence verified over multiple steps by test.
+-----
+
+## Shard Streaming
+
+```
+for shard_index in 0..79:
+    curl shard from HuggingFace -> /tmp/
+    strings extraction + quality filter
+    truncate to 120 chars
+    train W_U on up to 50 documents
+    checkpoint W_U + receipt to /tmp/
+    delete shard parquet
+```
+
+80 shards x 50 docs x ~13s/doc = ~14.5 hours total runtime.
 
 -----
 
@@ -167,6 +184,8 @@ packages/azim_trial/
   async_validator.fard
   owt_loader.fard
   owt_train.fard
+  owt_checkpoint.fard
+  owt_full_run.fard
   openwebtext_full_run.fard
   final_audit_proof.fard
   ...
