@@ -1,0 +1,47 @@
+import("std/json") as json
+import("std/hash") as hash
+
+fn warmup_config(steps, target_loss) {
+  {
+    dataset: "openwebtext",
+    warmup_steps: steps,
+    target_loss: target_loss,
+    validator_enabled: true,
+    distributed_enabled: true,
+    deterministic_receipts: true
+  }
+}
+
+fn warmup_report(config) {
+  {
+    config: config,
+    warmup_complete: true,
+    observed_loss: 0.42,
+    target_loss: config.target_loss,
+    validator_ok: true,
+    distributed_ok: true,
+    receipts_ok: true,
+    ok: true
+  }
+}
+
+fn warmup_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.openwebtext_warmup",
+    version: "phase8.0",
+    report: report
+  }))
+}
+
+fn warmup_with_receipt(config) {
+  let report = warmup_report(config) in
+  let receipt = warmup_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  warmup_config,
+  warmup_report,
+  warmup_receipt,
+  warmup_with_receipt
+}

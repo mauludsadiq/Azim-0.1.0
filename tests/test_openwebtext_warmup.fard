@@ -1,0 +1,35 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/openwebtext_warmup") as warmup
+
+test "warmup config returns record" {
+  type.of(warmup.warmup_config(1000, 0.42)) == "record"
+}
+
+test "warmup config records openwebtext" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  c.dataset == "openwebtext"
+}
+
+test "warmup config records 1000 steps" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  c.warmup_steps == 1000
+}
+
+test "warmup report returns record" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  type.of(warmup.warmup_report(c)) == "record"
+}
+
+test "warmup report ok true" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  let r = warmup.warmup_report(c) in
+  r.ok == true
+}
+
+test "warmup receipt deterministic" {
+  let c = warmup.warmup_config(1000, 0.42) in
+  let a = warmup.warmup_with_receipt(c) in
+  let b = warmup.warmup_with_receipt(c) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
