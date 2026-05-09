@@ -1,0 +1,73 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/async_validator") as av
+import("../packages/azim_trial/validator_thresholds") as vt
+import("../packages/azim_trial/phase7_validator_contract") as p7
+
+fn claim() {
+  { predicate: "has-color", subject: "sky", property: "color", value: "blue" }
+}
+
+fn initial_state() {
+  tensor.vector([0.0, 0.0, 0.0])
+}
+
+fn config() {
+  av.validator_config("phase7_validator", 1000, true, true)
+}
+
+fn thresholds() {
+  vt.thresholds(0.5, 0.8)
+}
+
+test "phase7 report returns record" {
+  type.of(p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds())) == "record"
+}
+
+test "phase7 has three derived probes" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  (r.probe_count == 3) && (list.len(r.probes) == 3)
+}
+
+test "phase7 lawful probe passes by validator receipts" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  r.lawful_ok == true
+}
+
+test "phase7 independence probe passes by tower zeroing receipt" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  r.independence_ok == true
+}
+
+test "phase7 leakage probe passes clean split" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  r.leakage_ok == true
+}
+
+test "phase7 backpressure allows checked update" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  r.may_commit_next_step && r.no_unchecked_update
+}
+
+test "phase7 forensic sidechain is derived" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  r.forensic.ok && (r.forensic.main_chain_len == 3) && (r.forensic.sidechain_len == 3)
+}
+
+test "phase7 receipt chain contains all supervisory receipts" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  (list.len(r.receipt_chain) == 6) && r.receipt_chain_ok
+}
+
+test "phase7 full contract ok" {
+  let r = p7.phase7_report(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  r.ok == true
+}
+
+test "phase7 receipt deterministic" {
+  let a = p7.phase7_with_receipt(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  let b = p7.phase7_with_receipt(config(), claim(), "sky is blue", initial_state(), 0.2, thresholds()) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}

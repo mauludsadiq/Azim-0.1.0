@@ -1,0 +1,154 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+import("async_validator") as av
+import("validator") as val
+import("leakage_probe") as leak
+import("tower_independence") as indep
+import("validator_thresholds") as vt
+import("backpressure_protocol") as bp
+import("forensic_sidechain") as fs
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn receipts_ok(receipts) {
+  list.all(receipts, fn(r) { receipt_ok(r) })
+}
+
+fn lawful_ok(report) {
+  report.lawful_receipt_ok &&
+  report.tower.receipt_ok &&
+  report.tower.layer_count_ok &&
+  report.tower.first_layer_ok &&
+  report.tower.final_layer_ok &&
+  report.lawful.inference_receipt_ok &&
+  report.lawful.surface_receipt_ok &&
+  report.lawful.realization_receipt_ok &&
+  report.lawful.lawful_surface
+}
+
+fn independence_ok(report) {
+  report.l0_stable == true
+}
+
+fn leakage_ok(report) {
+  report.clean_split == true
+}
+
+fn probe_event(name, axis, receipt, passed, report) {
+  {
+    name: name,
+    axis: axis,
+    receipt: receipt,
+    passed: passed,
+    report: report
+  }
+}
+
+fn probes_ok(probes) {
+  list.all(probes, fn(p) { p.passed == true && receipt_ok(p.receipt) })
+}
+
+fn phase7_report(config, claim, text, initial_state, score, thresholds) {
+  let async = av.validator_with_receipt(config) in
+  let lawful = val.validate_claim_with_receipt(claim) in
+  let independence = indep.independence_with_receipt(text, 3) in
+  let leakage = leak.probe_with_receipt(text, initial_state) in
+  let signal = bp.backpressure_with_receipt(leakage.receipt, score, thresholds) in
+
+  let probes = [
+    probe_event("lawful_output", "lawfulness", lawful.receipt, lawful_ok(lawful.report), lawful.report),
+    probe_event("tower_independence", "causal_independence", independence.receipt, independence_ok(independence.report), independence.report),
+    probe_event("leakage_split", "leakage", leakage.receipt, leakage_ok(leakage.report), leakage.report)
+  ] in
+
+  let main_chain = [
+    fs.main_chain_entry(1, lawful.receipt),
+    fs.main_chain_entry(2, independence.receipt),
+    fs.main_chain_entry(3, leakage.receipt)
+  ] in
+
+  let sidechain = [
+    fs.sidechain_event(1, lawful.receipt, lawful.receipt, "ok"),
+    fs.sidechain_event(2, independence.receipt, independence.receipt, "ok"),
+    fs.sidechain_event(3, leakage.receipt, leakage.receipt, signal.report.signal.status)
+  ] in
+
+  let forensic = fs.forensic_with_receipt(main_chain, sidechain) in
+  let receipt_chain = [
+    async.receipt,
+    lawful.receipt,
+    independence.receipt,
+    leakage.receipt,
+    signal.receipt,
+    forensic.receipt
+  ] in
+
+  {
+    config: config,
+    claim: claim,
+    text: text,
+    async_validator: async.report,
+    async_validator_receipt: async.receipt,
+    probes: probes,
+    probe_count: list.len(probes),
+    lawful: lawful.report,
+    lawful_receipt: lawful.receipt,
+    independence: independence.report,
+    independence_receipt: independence.receipt,
+    leakage: leakage.report,
+    leakage_receipt: leakage.receipt,
+    backpressure: signal.report,
+    backpressure_receipt: signal.receipt,
+    forensic: forensic.report,
+    forensic_receipt: forensic.receipt,
+    receipt_chain: receipt_chain,
+    receipt_chain_ok: receipts_ok(receipt_chain),
+    probes_ok: probes_ok(probes),
+    lawful_ok: lawful_ok(lawful.report),
+    independence_ok: independence_ok(independence.report),
+    leakage_ok: leakage_ok(leakage.report),
+    may_commit_next_step: signal.report.may_commit_next_step,
+    no_unchecked_update: probes_ok(probes) && signal.report.may_commit_next_step,
+    ok:
+      async.report.ok &&
+      probes_ok(probes) &&
+      lawful_ok(lawful.report) &&
+      independence_ok(independence.report) &&
+      leakage_ok(leakage.report) &&
+      signal.report.may_commit_next_step &&
+      forensic.report.ok &&
+      receipts_ok(receipt_chain)
+  }
+}
+
+fn phase7_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.phase7_validator_contract",
+    version: "1.0.0",
+    report: report
+  }))
+}
+
+fn phase7_with_receipt(config, claim, text, initial_state, score, thresholds) {
+  let report = phase7_report(config, claim, text, initial_state, score, thresholds) in
+  let receipt = phase7_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  receipt_ok,
+  receipts_ok,
+  lawful_ok,
+  independence_ok,
+  leakage_ok,
+  probe_event,
+  probes_ok,
+  phase7_report,
+  phase7_receipt,
+  phase7_with_receipt
+}
