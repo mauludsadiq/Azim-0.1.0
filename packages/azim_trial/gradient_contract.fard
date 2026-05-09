@@ -1,0 +1,130 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+import("finite_difference_gradient") as fdg
+import("gradient_oracle") as oracle
+import("hybrid_oracle") as hybrid
+import("gradient_variance") as gv
+import("optimizer") as opt
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn abs(x) {
+  if x < 0.0 then 0.0 - x else x
+}
+
+fn close(a, b, tolerance) {
+  abs(a - b) <= tolerance
+}
+
+fn tensor_close(a, b, tolerance) {
+  tensor.same_shape(a, b) &&
+  list.all(list.range(0, list.len(a.data)), fn(i) {
+    close(list.get(a.data, i), list.get(b.data, i), tolerance)
+  })
+}
+
+fn directional_checks(weight_tensor, gradient, directions, epsilon, tolerance) {
+  list.map(directions, fn(d) {
+    let actual = tensor.dot(gradient, d) in
+    let expected = oracle.directional_derivative(weight_tensor, d, epsilon) in
+    {
+      direction: d,
+      expected: expected,
+      actual: actual,
+      ok: close(actual, expected, tolerance)
+    }
+  })
+}
+
+fn all_checks_ok(checks) {
+  list.all(checks, fn(c) { c.ok == true })
+}
+
+fn gradient_contract(weight_tensor, epsilon, tolerance) {
+  let verified = fdg.finite_gradient_with_receipt(weight_tensor, epsilon) in
+  let oracle_out = oracle.oracle_with_receipt(weight_tensor, epsilon) in
+  let hybrid_out = hybrid.hybrid_with_receipt(weight_tensor, epsilon) in
+  let checks = directional_checks(weight_tensor, verified.gradient, oracle_out.output.directions, epsilon, tolerance) in
+  let oracle_scores_match = list.all(list.range(0, list.len(oracle_out.output.scores)), fn(i) {
+    close(list.get(oracle_out.output.scores, i), list.get(checks, i).actual, tolerance)
+  }) in
+  {
+    weight: weight_tensor,
+    epsilon: epsilon,
+    tolerance: tolerance,
+    gradient: verified.gradient,
+    gradient_receipt: verified.receipt,
+    oracle: oracle_out.output,
+    oracle_receipt: oracle_out.receipt,
+    hybrid: hybrid_out.output,
+    hybrid_receipt: hybrid_out.receipt,
+    directional_checks: checks,
+    directional_checks_ok: all_checks_ok(checks),
+    oracle_scores_match: oracle_scores_match,
+    receipts_ok: receipt_ok(verified.receipt) && receipt_ok(oracle_out.receipt) && receipt_ok(hybrid_out.receipt),
+    ok: all_checks_ok(checks) && oracle_scores_match && receipt_ok(verified.receipt) && receipt_ok(oracle_out.receipt) && receipt_ok(hybrid_out.receipt)
+  }
+}
+
+fn update_contract(weight_tensor, lr, epsilon, tolerance) {
+  let gc = gradient_contract(weight_tensor, epsilon, tolerance) in
+  let step = opt.optimizer_step_with_receipt(weight_tensor, gc.gradient, lr) in
+  let recomputed = opt.sgd(weight_tensor, gc.gradient, lr) in
+  let update_matches = tensor_close(step.step.after, recomputed, tolerance) in
+  {
+    gradient_contract: gc,
+    optimizer: step.step,
+    optimizer_receipt: step.receipt,
+    update_matches: update_matches,
+    receipts_ok: gc.receipts_ok && receipt_ok(step.receipt),
+    ok: gc.ok && update_matches && receipt_ok(step.receipt)
+  }
+}
+
+fn phase3_report(weight_tensor, previous_update, lr, epsilon, tolerance) {
+  let uc = update_contract(weight_tensor, lr, epsilon, tolerance) in
+  let variance = gv.variance_with_receipt(previous_update, uc.optimizer.after) in
+  {
+    update_contract: uc,
+    variance: variance.report,
+    variance_receipt: variance.receipt,
+    receipts_ok: uc.receipts_ok && receipt_ok(variance.receipt),
+    gradient_verified: uc.gradient_contract.ok,
+    optimizer_verified: uc.update_matches,
+    variance_measured: receipt_ok(variance.receipt),
+    ok: uc.ok && receipt_ok(variance.receipt)
+  }
+}
+
+fn phase3_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.gradient_contract.phase3",
+    version: "1.0.0",
+    report: report
+  }))
+}
+
+fn phase3_with_receipt(weight_tensor, previous_update, lr, epsilon, tolerance) {
+  let report = phase3_report(weight_tensor, previous_update, lr, epsilon, tolerance) in
+  let receipt = phase3_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  receipt_ok,
+  abs,
+  close,
+  tensor_close,
+  directional_checks,
+  all_checks_ok,
+  gradient_contract,
+  update_contract,
+  phase3_report,
+  phase3_receipt,
+  phase3_with_receipt
+}

@@ -1,0 +1,53 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/gradient_contract") as gc
+
+test "close accepts small delta" {
+  gc.close(1.0, 1.0001, 0.001) == true
+}
+
+test "tensor close accepts matching tensors" {
+  let a = tensor.vector([1.0, 2.0, 3.0]) in
+  let b = tensor.vector([1.0, 2.0, 3.0]) in
+  gc.tensor_close(a, b, 0.0) == true
+}
+
+test "gradient contract returns record" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  type.of(gc.gradient_contract(w, 0.001, 0.000001)) == "record"
+}
+
+test "gradient contract verifies directional checks" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let out = gc.gradient_contract(w, 0.001, 0.000001) in
+  out.directional_checks_ok && out.oracle_scores_match && out.receipts_ok && out.ok
+}
+
+test "gradient contract has eight checks" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let out = gc.gradient_contract(w, 0.001, 0.000001) in
+  list.len(out.directional_checks) == 8
+}
+
+test "update contract verifies optimizer update" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let out = gc.update_contract(w, 0.01, 0.001, 0.000001) in
+  out.update_matches && out.receipts_ok && out.ok
+}
+
+test "phase3 report verifies gradient optimizer variance receipts" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let prev = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let out = gc.phase3_report(w, prev, 0.01, 0.001, 0.000001) in
+  out.gradient_verified && out.optimizer_verified && out.variance_measured && out.receipts_ok && out.ok
+}
+
+test "phase3 receipt deterministic" {
+  let w = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let prev = tensor.vector([1.0, 2.0, 3.0, 4.0]) in
+  let a = gc.phase3_with_receipt(w, prev, 0.01, 0.001, 0.000001) in
+  let b = gc.phase3_with_receipt(w, prev, 0.01, 0.001, 0.000001) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
