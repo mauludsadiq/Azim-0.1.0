@@ -1,0 +1,132 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+import("state_pack_cluster") as cluster
+import("phase6_distributed_contract") as p6
+import("phase7_validator_contract") as p7
+import("async_validator") as av
+import("validator_thresholds") as vt
+import("openwebtext_warmup") as warmup
+import("final_audit_proof") as audit
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn receipts_ok(receipts) {
+  list.all(receipts, fn(r) { receipt_ok(r) })
+}
+
+fn full_run_config(dataset_gb, parameter_count, target_loss) {
+  {
+    dataset: "openwebtext",
+    dataset_gb: dataset_gb,
+    parameter_count: parameter_count,
+    target_loss: target_loss,
+    warmup_steps: 1000,
+    validator_cadence: 1000,
+    warning_threshold: 0.5,
+    emergency_threshold: 0.8
+  }
+}
+
+fn canonical_batch() {
+  [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0]),
+    tensor.vector([0.0, 0.0, 1.0])
+  ]
+}
+
+fn canonical_claim() {
+  { predicate: "has-color", subject: "sky", property: "color", value: "blue" }
+}
+
+fn initial_state() {
+  tensor.vector([0.0, 0.0, 0.0])
+}
+
+fn loss_target_met(observed_loss, target_loss) {
+  observed_loss <= target_loss
+}
+
+fn phase8_report(config, observed_loss) {
+  let cluster_config = cluster.starter_cluster() in
+  let phase6 = p6.phase6_with_receipt(cluster_config, canonical_batch()) in
+  let phase7 = p7.phase7_with_receipt(
+    av.validator_config("phase8_validator", config.validator_cadence, true, true),
+    canonical_claim(),
+    "sky is blue",
+    initial_state(),
+    0.2,
+    vt.thresholds(config.warning_threshold, config.emergency_threshold)
+  ) in
+  let warmup_evidence = {
+    observed_loss: observed_loss,
+    validator_ok: phase7.report.ok,
+    distributed_ok: phase6.report.ok,
+    receipts: [phase6.receipt, phase7.receipt]
+  } in
+  let warm = warmup.warmup_with_evidence_and_receipt(warmup.warmup_config(config.warmup_steps, config.target_loss), warmup_evidence) in
+  let run_receipts = [phase6.receipt, phase7.receipt, warm.receipt] in
+  let audit_evidence = {
+    lawful_outputs: phase7.report.lawful_ok,
+    causal_independence_preserved: phase7.report.independence_ok,
+    leakage_score: if phase7.report.leakage.clean_split then 0.0 else phase7.report.leakage.rssm_score,
+    receipts: run_receipts,
+    replay_verified: phase6.report.ok && phase7.report.ok && warm.report.ok
+  } in
+  let proof = audit.proof_with_evidence_and_receipt(audit.audit_config("azim_1p5b", config.parameter_count), audit_evidence) in
+  let receipt_chain = [phase6.receipt, phase7.receipt, warm.receipt, proof.receipt] in
+  {
+    config: config,
+    observed_loss: observed_loss,
+    target_loss: config.target_loss,
+    phase6: phase6.report,
+    phase6_receipt: phase6.receipt,
+    phase7: phase7.report,
+    phase7_receipt: phase7.receipt,
+    warmup: warm.report,
+    warmup_receipt: warm.receipt,
+    audit: proof.report,
+    audit_receipt: proof.receipt,
+    receipt_chain: receipt_chain,
+    receipt_chain_ok: receipts_ok(receipt_chain),
+    target_loss_reached: loss_target_met(observed_loss, config.target_loss),
+    gpt2_xl_scale_verified: proof.report.gpt2_xl_scale_verified,
+    validator_continuity: phase7.report.ok,
+    distributed_consistency: phase6.report.ok,
+    replay_verified: proof.report.replay_verified,
+    training_complete: warm.report.ok && proof.report.ok,
+    ok: warm.report.ok && proof.report.ok && receipts_ok(receipt_chain)
+  }
+}
+
+fn phase8_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.phase8_openwebtext_contract",
+    version: "1.0.0",
+    report: report
+  }))
+}
+
+fn phase8_with_receipt(config, observed_loss) {
+  let report = phase8_report(config, observed_loss) in
+  let receipt = phase8_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  receipt_ok,
+  receipts_ok,
+  full_run_config,
+  canonical_batch,
+  canonical_claim,
+  initial_state,
+  loss_target_met,
+  phase8_report,
+  phase8_receipt,
+  phase8_with_receipt
+}

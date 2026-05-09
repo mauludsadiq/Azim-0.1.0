@@ -1,0 +1,62 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/phase8_openwebtext_contract") as p8
+
+test "phase8 config returns record" {
+  type.of(p8.full_run_config(40.0, 1500000000.0, 0.28)) == "record"
+}
+
+test "phase8 report returns record" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  type.of(p8.phase8_report(c, 0.28)) == "record"
+}
+
+test "phase8 reaches target loss only from observed evidence" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = p8.phase8_report(c, 0.28) in
+  r.target_loss_reached == true
+}
+
+test "phase8 rejects missed target loss" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = p8.phase8_report(c, 0.50) in
+  r.target_loss_reached == false && r.ok == false
+}
+
+test "phase8 connects phase6 distributed consistency" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = p8.phase8_report(c, 0.28) in
+  r.distributed_consistency && r.phase6.ok
+}
+
+test "phase8 connects phase7 validator continuity" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = p8.phase8_report(c, 0.28) in
+  r.validator_continuity && r.phase7.ok
+}
+
+test "phase8 audit derives proof from receipts" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = p8.phase8_report(c, 0.28) in
+  r.audit.proof_complete && r.replay_verified && r.gpt2_xl_scale_verified
+}
+
+test "phase8 receipt chain contains phase6 phase7 warmup audit" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = p8.phase8_report(c, 0.28) in
+  (list.len(r.receipt_chain) == 4) && r.receipt_chain_ok
+}
+
+test "phase8 full contract ok" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let r = p8.phase8_report(c, 0.28) in
+  r.ok == true
+}
+
+test "phase8 receipt deterministic" {
+  let c = p8.full_run_config(40.0, 1500000000.0, 0.28) in
+  let a = p8.phase8_with_receipt(c, 0.28) in
+  let b = p8.phase8_with_receipt(c, 0.28) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
