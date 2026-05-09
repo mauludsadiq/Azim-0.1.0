@@ -1,0 +1,133 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("state_pack_cluster") as cluster
+import("distributed_scan") as ds
+import("distributed_determinism") as dd
+import("rssm") as rssm
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
+
+fn receipts_ok(receipts) {
+  list.all(receipts, fn(r) { receipt_ok(r) })
+}
+
+fn node_ids(nodes) {
+  list.map(nodes, fn(n) { n.node_id })
+}
+
+fn node_id_at(nodes, index) {
+  list.get(nodes, index).node_id
+}
+
+fn node_update_from_scan_node(node, index, partial_state, merged_state, scan_receipt) {
+  dd.node_update(
+    node.node_id,
+    { role: node.role, params: node.params, index: index },
+    { merged_state: merged_state, scan_receipt: scan_receipt },
+    {
+      node_id: node.node_id,
+      role: node.role,
+      params: node.params,
+      index: index,
+      required_scan_receipt: scan_receipt
+    },
+    {
+      node_id: node.node_id,
+      partial_state: partial_state,
+      merged_state: merged_state,
+      scan_receipt: scan_receipt
+    }
+  )
+}
+
+fn build_updates(nodes, scan_report, scan_receipt) {
+  list.map(list.range(0, list.len(nodes)), fn(i) {
+    node_update_from_scan_node(
+      list.get(nodes, i),
+      i,
+      list.get(scan_report.partials, i),
+      scan_report.merged,
+      scan_receipt
+    )
+  })
+}
+
+fn update_node_ids_match_config(updates, config) {
+  (list.len(updates) == list.len(config.nodes)) &&
+  list.all(list.range(0, list.len(updates)), fn(i) {
+    list.get(updates, i).node_id == node_id_at(config.nodes, i)
+  })
+}
+
+fn phase6_report(config, inputs) {
+  let initial_state = rssm.init_state(3) in
+  let scan = ds.distributed_scan_with_receipt(inputs, initial_state, config.node_count) in
+  let updates = build_updates(config.nodes, scan.report, scan.receipt) in
+  let det = dd.determinism_with_receipt(updates) in
+  let cluster_evidence = {
+    distributed: scan.report.equivalent,
+    state_pack_enabled: true,
+    receipts: [scan.receipt, det.receipt, det.report.merge_digest]
+  } in
+  let cluster_report = cluster.cluster_report_from_evidence(config, cluster_evidence) in
+  let cluster_receipt = cluster.cluster_receipt(cluster_report) in
+  let receipt_chain = [scan.receipt, det.receipt, det.report.merge_digest, cluster_receipt] in
+  {
+    config: config,
+    inputs: inputs,
+    initial_state: initial_state,
+    scan: scan.report,
+    scan_receipt: scan.receipt,
+    updates: updates,
+    determinism: det.report,
+    determinism_receipt: det.receipt,
+    cluster: cluster_report,
+    cluster_receipt: cluster_receipt,
+    receipt_chain: receipt_chain,
+    receipt_chain_ok: receipts_ok(receipt_chain),
+    scan_equivalent: scan.report.equivalent,
+    deterministic_updates: det.report.ok,
+    node_ids_ok: update_node_ids_match_config(updates, config),
+    allocation_ok: config.allocation_ok,
+    state_pack_ok: cluster_report.state_pack_enabled,
+    distributed_ok: cluster_report.distributed,
+    ok:
+      scan.report.equivalent &&
+      det.report.ok &&
+      update_node_ids_match_config(updates, config) &&
+      config.allocation_ok &&
+      cluster_report.ok &&
+      receipts_ok(receipt_chain)
+  }
+}
+
+fn phase6_receipt(report) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.phase6_distributed_contract",
+    version: "1.0.0",
+    report: report
+  }))
+}
+
+fn phase6_with_receipt(config, inputs) {
+  let report = phase6_report(config, inputs) in
+  let receipt = phase6_receipt(report) in
+  { report: report, receipt: receipt }
+}
+
+export {
+  receipt_ok,
+  receipts_ok,
+  node_ids,
+  node_id_at,
+  node_update_from_scan_node,
+  build_updates,
+  update_node_ids_match_config,
+  phase6_report,
+  phase6_receipt,
+  phase6_with_receipt
+}

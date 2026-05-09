@@ -1,0 +1,59 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/state_pack_cluster") as cluster
+import("../packages/azim_trial/phase6_distributed_contract") as p6
+
+fn batch() {
+  [
+    tensor.vector([1.0, 0.0, 0.0]),
+    tensor.vector([0.0, 1.0, 0.0]),
+    tensor.vector([0.0, 0.0, 1.0])
+  ]
+}
+
+test "phase6 report returns record" {
+  type.of(p6.phase6_report(cluster.starter_cluster(), batch())) == "record"
+}
+
+test "phase6 builds one update per configured node" {
+  let r = p6.phase6_report(cluster.starter_cluster(), batch()) in
+  list.len(r.updates) == r.config.node_count
+}
+
+test "phase6 node ids match cluster config" {
+  let r = p6.phase6_report(cluster.starter_cluster(), batch()) in
+  r.node_ids_ok == true
+}
+
+test "phase6 scan equivalent is derived" {
+  let r = p6.phase6_report(cluster.starter_cluster(), batch()) in
+  r.scan_equivalent == true
+}
+
+test "phase6 deterministic updates are receipt verified" {
+  let r = p6.phase6_report(cluster.starter_cluster(), batch()) in
+  r.deterministic_updates == true
+}
+
+test "phase6 receipt chain includes scan determinism merge cluster" {
+  let r = p6.phase6_report(cluster.starter_cluster(), batch()) in
+  (list.len(r.receipt_chain) == 4) && r.receipt_chain_ok
+}
+
+test "phase6 cluster evidence is derived from upstream receipts" {
+  let r = p6.phase6_report(cluster.starter_cluster(), batch()) in
+  r.cluster.ok && r.state_pack_ok && r.distributed_ok
+}
+
+test "phase6 full contract ok" {
+  let r = p6.phase6_report(cluster.starter_cluster(), batch()) in
+  r.ok == true
+}
+
+test "phase6 receipt deterministic" {
+  let a = p6.phase6_with_receipt(cluster.starter_cluster(), batch()) in
+  let b = p6.phase6_with_receipt(cluster.starter_cluster(), batch()) in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
