@@ -41,3 +41,39 @@ test "tensor constructor records valid false" {
   let t = tensor.tensor([2, 2], [1.0, 2.0, 3.0]) in
   t.valid == false
 }
+
+test "tensor same shape true" {
+  let a = tensor.vector([1.0, 2.0]) in
+  let b = tensor.vector([3.0, 4.0]) in
+  tensor.same_shape(a, b) == true
+}
+
+test "tensor same shape false" {
+  let a = tensor.vector([1.0, 2.0]) in
+  let b = tensor.matrix(1, 2, [3.0, 4.0]) in
+  tensor.same_shape(a, b) == false
+}
+
+test "tensor matvec compatible true" {
+  let m = tensor.matrix(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) in
+  let v = tensor.vector([1.0, 2.0, 3.0]) in
+  tensor.matvec_compatible(m, v) == true
+}
+
+test "tensor matvec compatible false" {
+  let m = tensor.matrix(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) in
+  let v = tensor.vector([1.0, 2.0]) in
+  tensor.matvec_compatible(m, v) == false
+}
+
+test "tensor matmul compatible true" {
+  let a = tensor.matrix(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) in
+  let b = tensor.matrix(3, 2, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) in
+  tensor.matmul_compatible(a, b) == true
+}
+
+test "tensor matmul compatible false" {
+  let a = tensor.matrix(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]) in
+  let b = tensor.matrix(2, 2, [1.0, 2.0, 3.0, 4.0]) in
+  tensor.matmul_compatible(a, b) == false
+}

@@ -37,6 +37,18 @@ fn matrix(rows, cols, xs) {
   tensor([rows, cols], xs)
 }
 
+fn same_shape(a, b) {
+  (list.len(a.dims) == list.len(b.dims)) && (prod(a.dims) == prod(b.dims))
+}
+
+fn matvec_compatible(m, v) {
+  (list.len(m.dims) == 2) && (list.len(v.dims) == 1) && (list.get(m.dims, 1) == list.get(v.dims, 0))
+}
+
+fn matmul_compatible(a, b) {
+  (list.len(a.dims) == 2) && (list.len(b.dims) == 2) && (list.get(a.dims, 1) == list.get(b.dims, 0))
+}
+
 fn get1(v, i) {
   list.get(v.data, i)
 }
@@ -141,4 +153,4 @@ fn digest(t) {
   hash.sha256_text(json.canonicalize(t))
 }
 
-export { prod, valid_shape, tensor, len, shape, zeros, vector, matrix, get1, get2, set1, map, zip_with, add, sub, scale, dot, row, col, matvec, matmul, relu, silu_scalar, silu, rms_norm, softmax, argmax, digest }
+export { prod, valid_shape, same_shape, matvec_compatible, matmul_compatible, tensor, len, shape, zeros, vector, matrix, get1, get2, set1, map, zip_with, add, sub, scale, dot, row, col, matvec, matmul, relu, silu_scalar, silu, rms_norm, softmax, argmax, digest }
