@@ -1,8 +1,13 @@
 import("std/json") as json
 import("std/hash") as hash
+import("std/str") as str
 import("module_graph") as mg
 import("parameter_registry") as preg
 import("train_step") as train
+
+fn receipt_ok(r) {
+  str.starts_with(r, "sha256:")
+}
 
 fn graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) {
   let param = preg.get_param(reg, parameter_id) in
@@ -25,11 +30,12 @@ fn graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) {
     error: "parameter not trainable"
   } else
   let stepped = train.train_step_with_receipt(param.tensor, input_text, target_label, lr) in
-  let next_reg = preg.update_param(reg, parameter_id, stepped.step.updated_weight, stepped.receipt) in
+  let next_reg = preg.update_param(reg, parameter_id, stepped.step.updated_W_U, stepped.receipt) in
+  let loss_receipt = hash.sha256_text(json.canonicalize({ component: "loss", loss: stepped.step.loss_before })) in
   let n = mg.node(
     hash.sha256_text(json.canonicalize({
       component: "azim_trial.graph_train_step.node_id",
-      version: "2.6.1",
+      version: "2.7.0",
       parameter_id: parameter_id,
       input_text: input_text,
       target_label: target_label,
@@ -40,7 +46,7 @@ fn graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) {
     "azim_trial.train_step",
     [input_text, target_label],
     [parameter_id],
-    [stepped.step.loss_receipt, stepped.step.optimizer_receipt, stepped.receipt],
+    [loss_receipt, stepped.receipt],
     [parameter_id]
   ) in
   let next_graph = mg.append_node(graph, n) in
@@ -57,7 +63,7 @@ fn graph_train_step(reg, graph, parameter_id, input_text, target_label, lr) {
 fn graph_train_receipt(result) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.graph_train_step",
-    version: "2.6.0",
+    version: "2.7.0",
     result: result
   }))
 }

@@ -1,71 +1,71 @@
 import("std/list") as list
 import("std/str") as str
 import("std/type") as type
-import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/weights") as weights
 import("../packages/azim_trial/parameter_registry") as preg
 import("../packages/azim_trial/module_graph") as mg
 import("../packages/azim_trial/graph_train_replay") as replay
 
 test "graph train replay returns record" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
-    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+    { parameter_id: "W_U", text: "sky is blue", label: "accepted" },
+    { parameter_id: "W_U", text: "sky is green", label: "rejected" }
   ] in
   type.of(replay.replay(examples, reg, g, 0.01)) == "record"
 }
 
 test "graph train replay records event count" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
-    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+    { parameter_id: "W_U", text: "sky is blue", label: "accepted" },
+    { parameter_id: "W_U", text: "sky is green", label: "rejected" }
   ] in
   let out = replay.replay(examples, reg, g, 0.01) in
   list.len(out.events) == 2
 }
 
 test "graph train replay appends graph nodes" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
-    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+    { parameter_id: "W_U", text: "sky is blue", label: "accepted" },
+    { parameter_id: "W_U", text: "sky is green", label: "rejected" }
   ] in
   let out = replay.replay(examples, reg, g, 0.01) in
   list.len(out.graph.nodes) == 2
 }
 
 test "graph train replay updates lineage twice" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
-    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+    { parameter_id: "W_U", text: "sky is blue", label: "accepted" },
+    { parameter_id: "W_U", text: "sky is green", label: "rejected" }
   ] in
   let out = replay.replay(examples, reg, g, 0.01) in
-  let updated = preg.get_param(out.registry, "p0") in
+  let updated = preg.get_param(out.registry, "W_U") in
   list.len(updated.lineage) == 2
 }
 
 test "graph train replay receipt deterministic" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    { parameter_id: "p0", text: "sky is blue", label: "accepted" },
-    { parameter_id: "p0", text: "sky is green", label: "rejected" }
+    { parameter_id: "W_U", text: "sky is blue", label: "accepted" },
+    { parameter_id: "W_U", text: "sky is green", label: "rejected" }
   ] in
   let a = replay.replay_with_receipt(examples, reg, g, 0.01) in
   let b = replay.replay_with_receipt(examples, reg, g, 0.01) in

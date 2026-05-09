@@ -6,14 +6,14 @@ import("train_step") as train
 
 fn run_one(checkpoint, example, lr) {
   let stepped = train.train_step_with_receipt(checkpoint.weight, example.text, example.label, lr) in
-  let next_checkpoint = ckpt.advance(checkpoint, stepped.step.updated_weight, stepped.receipt) in
+  let next_checkpoint = ckpt.advance(checkpoint, stepped.step.updated_W_U, stepped.receipt) in
   {
     checkpoint: next_checkpoint,
     event: {
       step: next_checkpoint.step,
       text: example.text,
       label: example.label,
-      loss: stepped.step.loss,
+      loss: stepped.step.loss_before,
       train_step_receipt: stepped.receipt,
       checkpoint_digest: ckpt.checkpoint_digest(next_checkpoint)
     }
@@ -34,7 +34,7 @@ fn replay(examples, initial_checkpoint, lr) {
 fn replay_receipt(result) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.checkpoint_replay",
-    version: "2.3.0",
+    version: "2.4.0",
     result: result
   }))
 }

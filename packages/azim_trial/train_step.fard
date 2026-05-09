@@ -1,42 +1,56 @@
 import("std/json") as json
 import("std/hash") as hash
+import("std/list") as list
 import("tensor") as tensor
 import("loss") as loss
 import("optimizer") as opt
 import("finite_difference_gradient") as fdg
+import("weights") as weights
 
-fn gradient_like(weight_tensor, loss_value) {
-  fdg.finite_gradient(weight_tensor, 0.001)
-}
-
-fn train_step(weight_tensor, input_text, target_label, lr) {
-  let loss_step = loss.loss_with_receipt(input_text, target_label) in
-  let grad = gradient_like(weight_tensor, loss_step.loss) in
-  let opt_step = opt.optimizer_step_with_receipt(weight_tensor, grad, lr) in
+fn train_step(W_U, input_text, target_label, lr) {
+  let loss_before = loss.loss_for_text(input_text, target_label) in
+  let grad = fdg.finite_gradient_W_U(W_U, input_text, target_label, 0.001) in
+  let grad_flat = tensor.vector(grad.data) in
+  let W_U_flat = tensor.vector(W_U.data) in
+  let opt_step = opt.optimizer_step(W_U_flat, grad_flat, lr) in
+  let W_U_updated = tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1), opt_step.after.data) in
+  let loss_after = fdg.nll_with_W_U(W_U_updated, input_text, target_label) in
   {
     input_text: input_text,
     target_label: target_label,
-    loss: loss_step.loss,
-    loss_receipt: loss_step.receipt,
+    loss_before: loss_before,
+    loss_after: loss_after,
+    loss_delta: loss_after - loss_before,
     gradient: grad,
-    optimizer: opt_step.step,
-    optimizer_receipt: opt_step.receipt,
-    updated_weight: opt_step.step.after
+    updated_W_U: W_U_updated
   }
 }
 
 fn train_step_receipt(step) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.train_step",
-    version: "2.0.0",
+    version: "3.0.0",
     step: step
   }))
 }
 
-fn train_step_with_receipt(weight_tensor, input_text, target_label, lr) {
-  let step = train_step(weight_tensor, input_text, target_label, lr) in
+fn train_step_with_receipt(W_U, input_text, target_label, lr) {
+  let step = train_step(W_U, input_text, target_label, lr) in
   let receipt = train_step_receipt(step) in
   { step: step, receipt: receipt }
 }
 
-export { gradient_like, train_step, train_step_receipt, train_step_with_receipt }
+fn multi_step(W_U, examples, lr, steps) {
+  let init = { W_U: W_U, history: [], step: 0 } in
+  list.fold(list.range(0, steps), init, fn(acc, _) {
+    let example = list.get(examples, acc.step % list.len(examples)) in
+    let s = train_step(acc.W_U, example.text, example.label, lr) in
+    {
+      W_U: s.updated_W_U,
+      history: list.append(acc.history, { step: acc.step, loss_before: s.loss_before, loss_after: s.loss_after, loss_delta: s.loss_delta }),
+      step: acc.step + 1
+    }
+  })
+}
+
+export { train_step, train_step_receipt, train_step_with_receipt, multi_step }

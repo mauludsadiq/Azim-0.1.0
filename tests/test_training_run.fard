@@ -1,78 +1,78 @@
 import("std/list") as list
 import("std/str") as str
 import("std/type") as type
-import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/weights") as weights
 import("../packages/azim_trial/parameter_registry") as preg
 import("../packages/azim_trial/module_graph") as mg
 import("../packages/azim_trial/corpus") as corpus
 import("../packages/azim_trial/training_run") as run
 
 test "training run returns record" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    corpus.example("sky is blue", "accepted", "p0"),
-    corpus.example("sky is green", "rejected", "p0")
+    corpus.example("sky is blue", "accepted", "W_U"),
+    corpus.example("sky is green", "rejected", "W_U")
   ] in
   let c = corpus.corpus("toy", examples) in
-  type.of(run.run(c, reg, g, "p0", 0.01)) == "record"
+  type.of(run.run(c, reg, g, "W_U", 0.01)) == "record"
 }
 
 test "training run ok true" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    corpus.example("sky is blue", "accepted", "p0"),
-    corpus.example("sky is green", "rejected", "p0")
+    corpus.example("sky is blue", "accepted", "W_U"),
+    corpus.example("sky is green", "rejected", "W_U")
   ] in
   let c = corpus.corpus("toy", examples) in
-  let out = run.run(c, reg, g, "p0", 0.01) in
+  let out = run.run(c, reg, g, "W_U", 0.01) in
   out.ok == true
 }
 
 test "training run event count matches corpus count" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    corpus.example("sky is blue", "accepted", "p0"),
-    corpus.example("sky is green", "rejected", "p0")
+    corpus.example("sky is blue", "accepted", "W_U"),
+    corpus.example("sky is green", "rejected", "W_U")
   ] in
   let c = corpus.corpus("toy", examples) in
-  let out = run.run(c, reg, g, "p0", 0.01) in
+  let out = run.run(c, reg, g, "W_U", 0.01) in
   list.len(out.events) == c.count
 }
 
 test "training run graph count matches corpus count" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    corpus.example("sky is blue", "accepted", "p0"),
-    corpus.example("sky is green", "rejected", "p0")
+    corpus.example("sky is blue", "accepted", "W_U"),
+    corpus.example("sky is green", "rejected", "W_U")
   ] in
   let c = corpus.corpus("toy", examples) in
-  let out = run.run(c, reg, g, "p0", 0.01) in
+  let out = run.run(c, reg, g, "W_U", 0.01) in
   list.len(out.graph.nodes) == c.count
 }
 
 test "training run receipt deterministic" {
-  let t = tensor.vector([1.0, 2.0, 3.0]) in
-  let p = preg.parameter("p0", t, true, "test") in
+  
+  let p = preg.parameter("W_U", weights.W_U, true, "test") in
   let reg = preg.registry([p]) in
   let g = mg.graph([]) in
   let examples = [
-    corpus.example("sky is blue", "accepted", "p0"),
-    corpus.example("sky is green", "rejected", "p0")
+    corpus.example("sky is blue", "accepted", "W_U"),
+    corpus.example("sky is green", "rejected", "W_U")
   ] in
   let c = corpus.corpus("toy", examples) in
-  let a = run.run_with_receipt(c, reg, g, "p0", 0.01) in
-  let b = run.run_with_receipt(c, reg, g, "p0", 0.01) in
+  let a = run.run_with_receipt(c, reg, g, "W_U", 0.01) in
+  let b = run.run_with_receipt(c, reg, g, "W_U", 0.01) in
   (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
 }

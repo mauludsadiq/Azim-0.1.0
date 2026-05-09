@@ -1,5 +1,6 @@
 import("std/json") as json
 import("std/hash") as hash
+import("std/list") as list
 import("state_pack_cluster") as cluster
 import("distributed_determinism") as dd
 import("distributed_scan") as ds
@@ -14,37 +15,60 @@ fn training_batch() {
   ]
 }
 
+fn target_state() {
+  tensor.vector([0.5, 0.5, 0.5])
+}
+
+fn node_train_step(node_id, batch, lr) {
+  let init_state = rssm.init_state(3) in
+  let init_weights = rssm.init_weights(3) in
+  let result = rssm.rssm_train_step(batch, init_state, target_state(), init_weights, lr, 0.001) in
+  {
+    node_id: node_id,
+    loss_before: result.loss_before,
+    loss_after: result.loss_after,
+    loss_delta: result.loss_delta,
+    rssm_weights: result.rssm_weights
+  }
+}
+
 fn cluster_training_run() {
   let config = cluster.starter_cluster() in
-  let state = rssm.init_state(3) in
+  let init_state = rssm.init_state(3) in
   let batch = training_batch() in
+  let scan = ds.distributed_scan(batch, init_state, 3) in
 
-  let scan = ds.distributed_scan(batch, state, 3) in
+  let n1 = node_train_step("node-1", batch, 0.01) in
+  let n2 = node_train_step("node-2", batch, 0.01) in
+  let n3 = node_train_step("node-3", batch, 0.01) in
 
   let updates = [
-    dd.node_update("node-1", { step: 0 }, { step: 1 }, { value: 1 }, { value: 1 }),
-    dd.node_update("node-2", { step: 0 }, { step: 1 }, { value: 2 }, { value: 2 }),
-    dd.node_update("node-3", { step: 0 }, { step: 1 }, { value: 3 }, { value: 3 })
+    dd.node_update("node-1", { loss: n1.loss_before }, { loss: n1.loss_after }, { loss_delta: n1.loss_delta }, { loss_delta: n1.loss_delta }),
+    dd.node_update("node-2", { loss: n2.loss_before }, { loss: n2.loss_after }, { loss_delta: n2.loss_delta }, { loss_delta: n2.loss_delta }),
+    dd.node_update("node-3", { loss: n3.loss_before }, { loss: n3.loss_after }, { loss_delta: n3.loss_delta }, { loss_delta: n3.loss_delta })
   ] in
 
   let det = dd.determinism_report(updates) in
+  let all_loss_decreased = (n1.loss_delta < 0.0) && (n2.loss_delta < 0.0) && (n3.loss_delta < 0.0) in
 
   {
     config: config,
     scan: scan,
+    nodes: [n1, n2, n3],
     determinism: det,
     total_params: config.total_params,
     node_count: config.node_count,
     equivalent_scan: scan.equivalent,
     deterministic_updates: det.ok,
-    ok: scan.equivalent && det.ok
+    all_loss_decreased: all_loss_decreased,
+    ok: scan.equivalent && det.ok && all_loss_decreased
   }
 }
 
 fn cluster_run_receipt(report) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.cluster_run_1p5b",
-    version: "phase6.3",
+    version: "phase6.4",
     report: report
   }))
 }

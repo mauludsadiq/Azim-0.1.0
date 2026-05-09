@@ -1,21 +1,19 @@
 import("std/list") as list
 import("std/str") as str
 import("std/type") as type
-import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/weights") as weights
 import("../packages/azim_trial/checkpoint") as ckpt
 import("../packages/azim_trial/checkpoint_replay") as replay
 
 test "run one advances checkpoint step" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let c = ckpt.genesis(w) in
+  let c = ckpt.genesis(weights.W_U) in
   let e = { text: "sky is blue", label: "accepted" } in
   let out = replay.run_one(c, e, 0.01) in
   out.checkpoint.step == 1
 }
 
 test "checkpoint replay returns record" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let c = ckpt.genesis(w) in
+  let c = ckpt.genesis(weights.W_U) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }
@@ -24,8 +22,7 @@ test "checkpoint replay returns record" {
 }
 
 test "checkpoint replay records event count" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let c = ckpt.genesis(w) in
+  let c = ckpt.genesis(weights.W_U) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }
@@ -35,8 +32,7 @@ test "checkpoint replay records event count" {
 }
 
 test "checkpoint replay final step equals examples length" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let c = ckpt.genesis(w) in
+  let c = ckpt.genesis(weights.W_U) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }
@@ -46,8 +42,7 @@ test "checkpoint replay final step equals examples length" {
 }
 
 test "checkpoint replay receipt deterministic" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let c = ckpt.genesis(w) in
+  let c = ckpt.genesis(weights.W_U) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }

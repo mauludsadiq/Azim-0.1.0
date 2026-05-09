@@ -1,7 +1,10 @@
 import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
+import("std/math") as math
 import("tensor") as tensor
+import("logits") as logits
+import("loss") as loss
 
 fn perturb_at(weight_tensor, index, delta) {
   tensor.vector(list.build(list.len(weight_tensor.data), fn(i) {
@@ -9,12 +12,43 @@ fn perturb_at(weight_tensor, index, delta) {
   }))
 }
 
+fn perturb_matrix_at(W, index, delta) {
+  tensor.matrix(list.get(W.dims, 0), list.get(W.dims, 1),
+    list.build(list.len(W.data), fn(i) {
+      if i == index then list.get(W.data, i) + delta else list.get(W.data, i)
+    })
+  )
+}
+
+fn nll_with_W_U(W_U, text, target_label) {
+  let hidden = logits.hidden_for_text(text) in
+  let logit_vec = tensor.matvec(W_U, hidden) in
+  loss.nll_from_logits(logit_vec, target_label)
+}
+
+fn gradient_component_W_U(W_U, text, target_label, index, epsilon) {
+  let plus  = perturb_matrix_at(W_U, index, epsilon) in
+  let minus = perturb_matrix_at(W_U, index, 0.0 - epsilon) in
+  let l_plus  = nll_with_W_U(plus,  text, target_label) in
+  let l_minus = nll_with_W_U(minus, text, target_label) in
+  (l_plus - l_minus) / (2.0 * epsilon)
+}
+
+fn finite_gradient_W_U(W_U, text, target_label, epsilon) {
+  let n = list.len(W_U.data) in
+  tensor.matrix(list.get(W_U.dims, 0), list.get(W_U.dims, 1),
+    list.build(n, fn(i) {
+      gradient_component_W_U(W_U, text, target_label, i, epsilon)
+    })
+  )
+}
+
 fn directional_loss_proxy(weight_tensor) {
   list.fold(weight_tensor.data, 0.0, fn(acc, x) { acc + x * x })
 }
 
 fn gradient_component(weight_tensor, index, epsilon) {
-  let plus = perturb_at(weight_tensor, index, epsilon) in
+  let plus  = perturb_at(weight_tensor, index, epsilon) in
   let minus = perturb_at(weight_tensor, index, 0.0 - epsilon) in
   (directional_loss_proxy(plus) - directional_loss_proxy(minus)) / (2.0 * epsilon)
 }
@@ -28,7 +62,7 @@ fn finite_gradient(weight_tensor, epsilon) {
 fn finite_gradient_receipt(weight_tensor, epsilon, gradient) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.finite_difference_gradient",
-    version: "3.2.0",
+    version: "3.3.0",
     weight: weight_tensor,
     epsilon: epsilon,
     gradient: gradient
@@ -41,4 +75,15 @@ fn finite_gradient_with_receipt(weight_tensor, epsilon) {
   { gradient: gradient, receipt: receipt }
 }
 
-export { perturb_at, directional_loss_proxy, gradient_component, finite_gradient, finite_gradient_receipt, finite_gradient_with_receipt }
+export {
+  perturb_at,
+  perturb_matrix_at,
+  nll_with_W_U,
+  gradient_component_W_U,
+  finite_gradient_W_U,
+  directional_loss_proxy,
+  gradient_component,
+  finite_gradient,
+  finite_gradient_receipt,
+  finite_gradient_with_receipt
+}

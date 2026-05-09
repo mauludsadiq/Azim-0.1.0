@@ -7,8 +7,28 @@ fn init_state(dim) {
   tensor.vector(list.repeat(0.0, dim))
 }
 
+fn init_weights(dim) {
+  let W_h = tensor.matrix(dim, dim, list.build(dim * dim, fn(i) {
+    let r = i / dim in
+    let c = i % dim in
+    if r == c then 0.5 else 0.0
+  })) in
+  let W_x = tensor.matrix(dim, dim, list.build(dim * dim, fn(i) {
+    let r = i / dim in
+    let c = i % dim in
+    if r == c then 0.5 else 0.0
+  })) in
+  { W_h: W_h, W_x: W_x, dim: dim }
+}
+
 fn transition(prev_state, input_vector) {
   tensor.scale(tensor.add(prev_state, input_vector), 0.5)
+}
+
+fn transition_learned(prev_state, input_vector, rssm_weights) {
+  let h = tensor.matvec(rssm_weights.W_h, prev_state) in
+  let x = tensor.matvec(rssm_weights.W_x, input_vector) in
+  tensor.relu(tensor.add(h, x))
 }
 
 fn step(prev_state, input_vector) {
@@ -20,9 +40,24 @@ fn step(prev_state, input_vector) {
   }
 }
 
+fn step_learned(prev_state, input_vector, rssm_weights) {
+  let next = transition_learned(prev_state, input_vector, rssm_weights) in
+  {
+    prev_state: prev_state,
+    input: input_vector,
+    state: next
+  }
+}
+
 fn run(inputs, initial_state) {
   list.fold(inputs, initial_state, fn(state, input_vector) {
     transition(state, input_vector)
+  })
+}
+
+fn run_learned(inputs, initial_state, rssm_weights) {
+  list.fold(inputs, initial_state, fn(state, input_vector) {
+    transition_learned(state, input_vector, rssm_weights)
   })
 }
 
@@ -37,10 +72,66 @@ fn run_trace(inputs, initial_state) {
   })
 }
 
+fn run_trace_learned(inputs, initial_state, rssm_weights) {
+  let init = { state: initial_state, steps: [] } in
+  list.fold(inputs, init, fn(acc, input_vector) {
+    let s = step_learned(acc.state, input_vector, rssm_weights) in
+    {
+      state: s.state,
+      steps: list.append(acc.steps, s)
+    }
+  })
+}
+
+fn rssm_loss(inputs, initial_state, target_state, rssm_weights) {
+  let final_state = run_learned(inputs, initial_state, rssm_weights) in
+  let diff = tensor.sub(final_state, target_state) in
+  tensor.dot(diff, diff)
+}
+
+fn perturb_W_h_at(rssm_weights, index, delta) {
+  let new_data = list.build(list.len(rssm_weights.W_h.data), fn(i) {
+    if i == index then list.get(rssm_weights.W_h.data, i) + delta
+    else list.get(rssm_weights.W_h.data, i)
+  }) in
+  let new_W_h = tensor.matrix(rssm_weights.dim, rssm_weights.dim, new_data) in
+  { W_h: new_W_h, W_x: rssm_weights.W_x, dim: rssm_weights.dim }
+}
+
+fn gradient_W_h(inputs, initial_state, target_state, rssm_weights, epsilon) {
+  let n = list.len(rssm_weights.W_h.data) in
+  tensor.matrix(rssm_weights.dim, rssm_weights.dim,
+    list.build(n, fn(i) {
+      let plus  = perturb_W_h_at(rssm_weights, i, epsilon) in
+      let minus = perturb_W_h_at(rssm_weights, i, 0.0 - epsilon) in
+      let l_plus  = rssm_loss(inputs, initial_state, target_state, plus) in
+      let l_minus = rssm_loss(inputs, initial_state, target_state, minus) in
+      (l_plus - l_minus) / (2.0 * epsilon)
+    })
+  )
+}
+
+fn rssm_train_step(inputs, initial_state, target_state, rssm_weights, lr, epsilon) {
+  let loss_before = rssm_loss(inputs, initial_state, target_state, rssm_weights) in
+  let grad = gradient_W_h(inputs, initial_state, target_state, rssm_weights, epsilon) in
+  let flat_W = tensor.vector(rssm_weights.W_h.data) in
+  let flat_g = tensor.vector(grad.data) in
+  let updated_flat = tensor.sub(flat_W, tensor.scale(flat_g, lr)) in
+  let new_W_h = tensor.matrix(rssm_weights.dim, rssm_weights.dim, updated_flat.data) in
+  let new_weights = { W_h: new_W_h, W_x: rssm_weights.W_x, dim: rssm_weights.dim } in
+  let loss_after = rssm_loss(inputs, initial_state, target_state, new_weights) in
+  {
+    loss_before: loss_before,
+    loss_after: loss_after,
+    loss_delta: loss_after - loss_before,
+    rssm_weights: new_weights
+  }
+}
+
 fn rssm_receipt(output) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.rssm",
-    version: "phase2.1",
+    version: "phase2.2",
     output: output
   }))
 }
@@ -51,4 +142,20 @@ fn run_trace_with_receipt(inputs, initial_state) {
   { output: output, receipt: receipt }
 }
 
-export { init_state, transition, step, run, run_trace, rssm_receipt, run_trace_with_receipt }
+export {
+  init_state,
+  init_weights,
+  transition,
+  transition_learned,
+  step,
+  step_learned,
+  run,
+  run_learned,
+  run_trace,
+  run_trace_learned,
+  rssm_loss,
+  gradient_W_h,
+  rssm_train_step,
+  rssm_receipt,
+  run_trace_with_receipt
+}

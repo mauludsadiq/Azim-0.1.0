@@ -1,45 +1,41 @@
 import("std/list") as list
 import("std/str") as str
 import("std/type") as type
-import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/weights") as weights
 import("../packages/azim_trial/train_replay") as replay
 
 test "replay returns record" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }
   ] in
-  type.of(replay.replay(examples, w, 0.01)) == "record"
+  type.of(replay.replay(examples, weights.W_U, 0.01)) == "record"
 }
 
 test "replay records step count" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }
   ] in
-  let out = replay.replay(examples, w, 0.01) in
+  let out = replay.replay(examples, weights.W_U, 0.01) in
   list.len(out.steps) == 2
 }
 
 test "replay final weight is tensor" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }
   ] in
-  let out = replay.replay(examples, w, 0.01) in
+  let out = replay.replay(examples, weights.W_U, 0.01) in
   type.of(out.weight) == "record"
 }
 
 test "replay receipt deterministic" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
   let examples = [
     { text: "sky is blue", label: "accepted" },
     { text: "sky is green", label: "rejected" }
   ] in
-  let a = replay.replay_with_receipt(examples, w, 0.01) in
-  let b = replay.replay_with_receipt(examples, w, 0.01) in
+  let a = replay.replay_with_receipt(examples, weights.W_U, 0.01) in
+  let b = replay.replay_with_receipt(examples, weights.W_U, 0.01) in
   (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
 }

@@ -1,6 +1,10 @@
 import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
+import("std/str") as str
+import("leakage_probe") as lp
+import("tower_independence") as ti
+import("rssm") as rssm
 
 fn validator_config(name, cadence_steps, sidechain_enabled, backpressure_enabled) {
   {
@@ -19,18 +23,34 @@ fn probe(name, axis, passed) {
   }
 }
 
-fn probe_suite() {
+fn semantic_probe(text) {
+  let state = rssm.init_state(3) in
+  let result = lp.probe(text, state) in
+  probe("semantic_probe", "semantic", result.clean_split)
+}
+
+fn independence_probe(text) {
+  let result = ti.independence_report(text, 3) in
+  probe("gradient_probe", "optimization", result.l0_stable)
+}
+
+fn receipt_probe(receipt) {
+  probe("receipt_probe", "verification", str.starts_with(receipt, "sha256:"))
+}
+
+fn probe_suite_for(text, sample_receipt) {
   [
-    probe("semantic_probe", "semantic", true),
-    probe("gradient_probe", "optimization", true),
-    probe("receipt_probe", "verification", true)
+    semantic_probe(text),
+    independence_probe(text),
+    receipt_probe(sample_receipt)
   ]
 }
 
 fn validator_run(config) {
-  let probes = probe_suite() in
+  let sample_text = "sky has-color blue" in
+  let sample_receipt = hash.sha256_text(json.canonicalize({ sample: sample_text })) in
+  let probes = probe_suite_for(sample_text, sample_receipt) in
   let passed = list.all(probes, fn(p) { p.passed }) in
-
   {
     config: config,
     probes: probes,
@@ -46,7 +66,7 @@ fn validator_run(config) {
 fn validator_receipt(report) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.async_validator",
-    version: "phase7.0",
+    version: "phase7.1",
     report: report
   }))
 }
@@ -57,10 +77,15 @@ fn validator_with_receipt(config) {
   { report: report, receipt: receipt }
 }
 
+fn probe_suite() {
+  probe_suite_for("sky has-color blue", "sha256:000")
+}
+
 export {
   validator_config,
-  probe,
   probe_suite,
+  probe,
+  probe_suite_for,
   validator_run,
   validator_receipt,
   validator_with_receipt

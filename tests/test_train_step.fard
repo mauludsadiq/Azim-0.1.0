@@ -2,33 +2,42 @@ import("std/list") as list
 import("std/str") as str
 import("std/type") as type
 import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/weights") as weights
 import("../packages/azim_trial/train_step") as train
 
-test "finite gradient returns tensor record" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  type.of(train.gradient_like(w, 2.0)) == "record"
-}
-
-test "finite gradient preserves length" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let g = train.gradient_like(w, 2.0) in
-  list.len(g.data) == list.len(w.data)
-}
-
 test "train step returns record" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  type.of(train.train_step(w, "sky is blue", "accepted", 0.01)) == "record"
+  let step = train.train_step(weights.W_U, "sky is blue", "accepted", 0.01) in
+  type.of(step) == "record"
 }
 
-test "train step records receipts" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let step = train.train_step(w, "sky is blue", "accepted", 0.01) in
-  str.starts_with(step.loss_receipt, "sha256:") && str.starts_with(step.optimizer_receipt, "sha256:")
+test "train step loss decreases" {
+  let step = train.train_step(weights.W_U, "sky is blue", "accepted", 0.01) in
+  step.loss_delta < 0.0
+}
+
+test "train step records loss before and after" {
+  let step = train.train_step(weights.W_U, "sky is blue", "accepted", 0.01) in
+  (step.loss_before > 0.0) && (step.loss_after > 0.0)
+}
+
+test "train step returns updated W_U" {
+  let step = train.train_step(weights.W_U, "sky is blue", "accepted", 0.01) in
+  list.len(step.updated_W_U.data) == list.len(weights.W_U.data)
 }
 
 test "train step receipt deterministic" {
-  let w = tensor.vector([1.0, 2.0, 3.0]) in
-  let a = train.train_step_with_receipt(w, "sky is blue", "accepted", 0.01) in
-  let b = train.train_step_with_receipt(w, "sky is blue", "accepted", 0.01) in
+  let a = train.train_step_with_receipt(weights.W_U, "sky is blue", "accepted", 0.01) in
+  let b = train.train_step_with_receipt(weights.W_U, "sky is blue", "accepted", 0.01) in
   (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
+
+test "multi step reduces loss" {
+  let examples = [
+    { text: "sky is blue", label: "accepted" },
+    { text: "sky is green", label: "rejected" }
+  ] in
+  let result = train.multi_step(weights.W_U, examples, 0.01, 3) in
+  let first = list.get(result.history, 0) in
+  let last = list.get(result.history, 2) in
+  last.loss_after < first.loss_before
 }

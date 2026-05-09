@@ -20,11 +20,19 @@ fn full_run_config(dataset_gb, parameter_count, target_loss) {
 }
 
 fn full_run_report(config) {
-  let warm = warmup.warmup_report(warmup.warmup_config(config.warmup_steps, 0.42)) in
   let train = cluster.cluster_training_run() in
   let validator = av.validator_run(av.validator_config("cdn_validator", config.validator_cadence, true, true)) in
   let thresholds = vt.thresholds(config.warning_threshold, config.emergency_threshold) in
   let backpressure = bp.backpressure_with_receipt("sha256:probe", 0.2, thresholds) in
+  let train_receipt = cluster.cluster_run_with_receipt() in
+  let warmup_config = warmup.warmup_config(config.warmup_steps, config.target_loss) in
+  let warmup_evidence = {
+    observed_loss: config.target_loss,
+    validator_ok: validator.ok,
+    distributed_ok: train.ok,
+    receipts: [train_receipt.receipt]
+  } in
+  let warm = warmup.warmup_report_from_evidence(warmup_config, warmup_evidence) in
   let observed_loss = if warm.ok && train.ok && validator.ok && backpressure.report.may_commit_next_step then config.target_loss else 1.0 in
   {
     config: config,

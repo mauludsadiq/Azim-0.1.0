@@ -1,0 +1,50 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/rssm") as rssm
+
+test "init weights returns record" {
+  type.of(rssm.init_weights(3)) == "record"
+}
+
+test "transition learned returns tensor" {
+  let w = rssm.init_weights(3) in
+  let s = rssm.init_state(3) in
+  let x = tensor.vector([1.0, 0.0, 0.0]) in
+  type.of(rssm.transition_learned(s, x, w)) == "record"
+}
+
+test "run learned returns tensor" {
+  let w = rssm.init_weights(3) in
+  let s = rssm.init_state(3) in
+  let inputs = [tensor.vector([1.0, 0.0, 0.0]), tensor.vector([0.0, 1.0, 0.0])] in
+  type.of(rssm.run_learned(inputs, s, w)) == "record"
+}
+
+test "rssm loss returns float" {
+  let w = rssm.init_weights(3) in
+  let s = rssm.init_state(3) in
+  let inputs = [tensor.vector([1.0, 0.0, 0.0]), tensor.vector([0.0, 1.0, 0.0])] in
+  let target = tensor.vector([0.5, 0.5, 0.0]) in
+  type.of(rssm.rssm_loss(inputs, s, target, w)) == "float"
+}
+
+test "rssm train step loss decreases" {
+  let w = rssm.init_weights(3) in
+  let s = rssm.init_state(3) in
+  let inputs = [tensor.vector([1.0, 0.0, 0.0]), tensor.vector([0.0, 1.0, 0.0])] in
+  let target = tensor.vector([0.5, 0.5, 0.0]) in
+  let result = rssm.rssm_train_step(inputs, s, target, w, 0.01, 0.001) in
+  result.loss_delta < 0.0
+}
+
+test "rssm multi step converges" {
+  let w = rssm.init_weights(3) in
+  let s = rssm.init_state(3) in
+  let inputs = [tensor.vector([1.0, 0.0, 0.0]), tensor.vector([0.0, 1.0, 0.0])] in
+  let target = tensor.vector([0.5, 0.5, 0.0]) in
+  let r0 = rssm.rssm_train_step(inputs, s, target, w, 0.01, 0.001) in
+  let r1 = rssm.rssm_train_step(inputs, s, target, r0.rssm_weights, 0.01, 0.001) in
+  let r2 = rssm.rssm_train_step(inputs, s, target, r1.rssm_weights, 0.01, 0.001) in
+  r2.loss_after < r0.loss_before
+}

@@ -13,17 +13,28 @@ fn node_scan(inputs, state) {
   scan.sequential(inputs, state)
 }
 
+fn scan_chunks_with_state(chunks, initial_state) {
+  let init = { state: initial_state, partials: [] } in
+  let result = list.fold(chunks, init, fn(acc, chunk) {
+    let next_state = node_scan(chunk, acc.state) in
+    {
+      state: next_state,
+      partials: list.append(acc.partials, next_state)
+    }
+  }) in
+  result
+}
+
 fn distributed_scan(inputs, state, parts) {
   let chunks = partition(inputs, parts) in
-  let partials = list.map(chunks, fn(chunk) {
-    node_scan(chunk, state)
-  }) in
-  let merged = scan.sequential(inputs, state) in
+  let chained = scan_chunks_with_state(chunks, state) in
+  let merged = chained.state in
+  let sequential = scan.sequential(inputs, state) in
   {
     chunks: chunks,
-    partials: partials,
+    partials: chained.partials,
     merged: merged,
-    equivalent: merged == scan.sequential(inputs, state),
+    equivalent: merged == sequential,
     node_count: parts
   }
 }
@@ -31,7 +42,7 @@ fn distributed_scan(inputs, state, parts) {
 fn scan_receipt(report) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.distributed_scan",
-    version: "phase6.2",
+    version: "phase6.3",
     report: report
   }))
 }
