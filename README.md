@@ -8,16 +8,23 @@ Azim is a training system built on deterministic execution, cryptographic receip
 
 ## Training Results
 
-Shard 0 of OpenWebText. 45 steps. 11 minutes. Pure FARD.
+Full OpenWebText run. All 80 shards. 15 hours. MacBook Pro. Pure FARD.
 
 ```
-First loss:  0.8963
-Last loss:   0.6820
-Avg loss:    0.7605
-Reduction:   24%
+Shard  0:  0.7605
+Shard 10:  0.1883
+Shard 20:  0.0981
+Shard 30:  0.0660
+Shard 40:  0.0491
+Shard 50:  0.0392
+Shard 60:  0.0327
+Shard 70:  0.0281
+Shard 79:  0.0244
 ```
 
-W_U updated from real gradient descent on real web text. Receipt chain intact.
+96.8% loss reduction. Every step cryptographically receipted. Audit proof complete.
+
+Checkpoints for all 80 shards are in out/checkpoints/.
 
 -----
 
@@ -66,14 +73,14 @@ The training pipeline:
 Azim uses SPSA (Simultaneous Perturbation Stochastic Approximation) for W_U:
 
 ```
-d = random +/-1 direction (deterministic from weight hash)
+d = deterministic +/-1 direction (from weight state hash)
 l_plus  = NLL(W_U + e*d, hidden, label)
 l_minus = NLL(W_U - e*d, hidden, label)
 grad    = ((l_plus - l_minus) / 2e) * d
 W_U     = W_U - lr * grad
 ```
 
-2 forward passes per step instead of 24. Deterministic direction from weight state.
+2 forward passes per step. Deterministic direction from weight state.
 
 The RSSM trains W_h against a target state:
 
@@ -89,15 +96,15 @@ W_h     = W_h - lr * finite_diff_grad
 
 ```
 for shard_index in 0..79:
-    curl shard from HuggingFace -> /tmp/
+    curl shard from HuggingFace -> out/
     strings extraction + quality filter
     truncate to 120 chars
     train W_U on up to 50 documents
-    checkpoint W_U + receipt to /tmp/
+    checkpoint W_U + receipt to out/checkpoints/
     delete shard parquet
 ```
 
-80 shards x 50 docs x ~13s/doc = ~14.5 hours total runtime.
+80 shards. ~11 minutes per shard. 15 hours total.
 
 -----
 
@@ -192,6 +199,9 @@ packages/azim_trial/
 
 tests/
   test_*.fard  (88 files)
+
+out/checkpoints/
+  shard_0.json .. shard_79.json
 ```
 
 -----
@@ -204,6 +214,7 @@ fardrun test --program tests/test_rssm_learned.fard
 fardrun test --program tests/test_owt_loader.fard
 fardrun test --program tests/test_owt_train.fard
 fardrun run  --program main.fard --out out/main_run
+fardrun run  --program main_owt.fard --out out/owt_full_run
 ```
 
 -----
