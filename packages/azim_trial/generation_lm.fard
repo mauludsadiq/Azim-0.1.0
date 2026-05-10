@@ -1,0 +1,57 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+import("tokenizer") as tok
+import("lm_head") as lm
+
+fn greedy_step(token_ids) {
+  let pred = lm.predict_next(token_ids) in
+  pred.predicted_id
+}
+
+fn generate(prompt_ids, max_new_tokens) {
+  let init = { ids: prompt_ids, generated: [], steps: 0 } in
+  let result = list.fold(list.range(0, max_new_tokens), init, fn(acc, _) {
+    let next_id = greedy_step(acc.ids) in
+    if next_id == tok.eos_id then acc else
+    {
+      ids: list.append(acc.ids, next_id),
+      generated: list.append(acc.generated, next_id),
+      steps: acc.steps + 1
+    }
+  }) in
+  result
+}
+
+fn generate_text(prompt, max_new_tokens) {
+  let prompt_ids = tok.tokenize(prompt) in
+  let result = generate(prompt_ids, max_new_tokens) in
+  let all_ids = result.ids in
+  let generated_text = tok.detokenize(result.generated) in
+  {
+    prompt: prompt,
+    prompt_ids: prompt_ids,
+    generated_ids: result.generated,
+    generated_text: generated_text,
+    full_text: str.concat([prompt, generated_text]),
+    steps: result.steps
+  }
+}
+
+fn generation_receipt(output) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.generation_lm",
+    version: "1.0.0",
+    output: output
+  }))
+}
+
+fn generate_with_receipt(prompt, max_new_tokens) {
+  let output = generate_text(prompt, max_new_tokens) in
+  let receipt = generation_receipt(output) in
+  { output: output, receipt: receipt }
+}
+
+export { greedy_step, generate, generate_text, generation_receipt, generate_with_receipt }

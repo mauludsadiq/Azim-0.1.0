@@ -1,0 +1,36 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/generation_lm") as gen
+import("../packages/azim_trial/tokenizer") as tok
+
+test "generate text returns record" {
+  type.of(gen.generate_text("sky", 5)) == "record"
+}
+
+test "generate produces tokens" {
+  let out = gen.generate_text("sky", 5) in
+  out.steps > 0
+}
+
+test "generated text is string" {
+  let out = gen.generate_text("sky", 5) in
+  type.of(out.generated_text) == "text"
+}
+
+test "full text starts with prompt" {
+  let out = gen.generate_text("sky", 5) in
+  str.starts_with(out.full_text, "sky")
+}
+
+test "generation is deterministic" {
+  let a = gen.generate_with_receipt("sky", 5) in
+  let b = gen.generate_with_receipt("sky", 5) in
+  a.receipt == b.receipt
+}
+
+test "different prompts give different output" {
+  let a = gen.generate_text("sky", 5) in
+  let b = gen.generate_text("fire", 5) in
+  a.generated_ids != b.generated_ids
+}
