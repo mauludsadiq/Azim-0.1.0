@@ -1,0 +1,45 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/tokenizer") as tok
+import("../packages/azim_trial/lm_head") as lm
+
+test "lm logits dimension is vocab size" {
+  let ids = tok.tokenize("abc") in
+  let logits = lm.lm_logits_at_position(ids, 0) in
+  list.len(logits.data) == lm.vocab_size
+}
+
+test "lm loss returns float" {
+  type.of(lm.lm_loss_for_text("abc")) == "float"
+}
+
+test "lm loss over sequence a b c" {
+  let ids = [65, 66, 67] in
+  let loss = lm.lm_loss_for_tokens(ids) in
+  loss > 0.0
+}
+
+test "predict next returns record" {
+  let ids = tok.tokenize("sky") in
+  type.of(lm.predict_next(ids)) == "record"
+}
+
+test "predict next token is in vocabulary" {
+  let ids = tok.tokenize("sky") in
+  let pred = lm.predict_next(ids) in
+  pred.predicted_id >= 0 && pred.predicted_id < lm.vocab_size
+}
+
+test "lm loss with receipt is deterministic" {
+  let a = lm.lm_loss_with_receipt("sky is blue") in
+  let b = lm.lm_loss_with_receipt("sky is blue") in
+  (a.receipt == b.receipt) && str.starts_with(a.receipt, "sha256:")
+}
+
+test "different positions give different logits" {
+  let ids = tok.tokenize("hello") in
+  let l0 = lm.lm_logits_at_position(ids, 0) in
+  let l1 = lm.lm_logits_at_position(ids, 1) in
+  l0.data != l1.data
+}

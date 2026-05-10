@@ -1,0 +1,104 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/math") as math
+import("tensor") as tensor
+import("tokenizer") as tok
+import("weights") as weights
+import("embedding") as emb
+import("block") as block
+
+let vocab_size = tok.vocab_size()
+let d_model = weights.model_config.d_model
+
+fn det_val(seed, i) {
+  let x = (seed * 1664525 + i * 1013904223) % 2147483648 in
+  let f = (x % 1000) + 0.0 in
+  (f / 500.0) - 1.0
+}
+
+let W_U_lm = tensor.matrix(vocab_size, d_model,
+  list.build(vocab_size * d_model, fn(i) { det_val(909, i) })
+)
+
+fn hidden_for_tokens(token_ids) {
+  let vectors = list.map(token_ids, fn(id) { emb.embed_id(id) }) in
+  tensor.rms_norm(block.block(vectors), 0.000001)
+}
+
+fn lm_logits_for_hidden(hidden) {
+  tensor.matvec(W_U_lm, hidden)
+}
+
+fn lm_logits_at_position(token_ids, pos) {
+  let prefix = list.take(token_ids, pos + 1) in
+  let hidden = hidden_for_tokens(prefix) in
+  lm_logits_for_hidden(hidden)
+}
+
+fn logsumexp(xs) {
+  let maxv = list.fold(xs, list.get(xs, 0), fn(acc, x) { if x > acc then x else acc }) in
+  let exps = list.map(xs, fn(x) { math.exp(x - maxv) }) in
+  let total = list.fold(exps, 0.0, fn(acc, x) { acc + x }) in
+  maxv + math.log(total)
+}
+
+fn nll_token(logit_tensor, target_token_id) {
+  let lse = logsumexp(logit_tensor.data) in
+  lse - list.get(logit_tensor.data, target_token_id)
+}
+
+fn lm_loss_for_tokens(token_ids) {
+  let n = list.len(token_ids) in
+  if n < 2 then 0.0 else
+  let positions = list.range(0, n - 1) in
+  let losses = list.map(positions, fn(pos) {
+    let logits = lm_logits_at_position(token_ids, pos) in
+    let target = list.get(token_ids, pos + 1) in
+    nll_token(logits, target)
+  }) in
+  list.fold(losses, 0.0, fn(acc, x) { acc + x }) / list.len(losses)
+}
+
+fn lm_loss_for_text(text) {
+  let token_ids = tok.tokenize(text) in
+  lm_loss_for_tokens(token_ids)
+}
+
+fn predict_next(token_ids) {
+  let logits = lm_logits_at_position(token_ids, list.len(token_ids) - 1) in
+  let pred_id = tensor.argmax(logits.data) in
+  { logits: logits, predicted_id: pred_id, predicted_token: tok.token_at(pred_id) }
+}
+
+fn lm_head_receipt(token_ids, loss) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.lm_head",
+    version: "1.0.0",
+    token_ids: token_ids,
+    loss: loss
+  }))
+}
+
+fn lm_loss_with_receipt(text) {
+  let token_ids = tok.tokenize(text) in
+  let loss = lm_loss_for_tokens(token_ids) in
+  let receipt = lm_head_receipt(token_ids, loss) in
+  { loss: loss, token_ids: token_ids, receipt: receipt }
+}
+
+export {
+  vocab_size,
+  d_model,
+  W_U_lm,
+  hidden_for_tokens,
+  lm_logits_for_hidden,
+  lm_logits_at_position,
+  logsumexp,
+  nll_token,
+  lm_loss_for_tokens,
+  lm_loss_for_text,
+  predict_next,
+  lm_head_receipt,
+  lm_loss_with_receipt
+}
