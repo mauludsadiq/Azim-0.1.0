@@ -1,0 +1,3 @@
+import("../packages/azim_trial/generation_lm") as gen
+
+gen.generate_text("the sky is", 20)
