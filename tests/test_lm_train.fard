@@ -1,0 +1,23 @@
+import("std/type") as type
+import("../packages/azim_trial/lm_head") as lm
+import("../packages/azim_trial/lm_train") as lmt
+
+test "lm train step returns record" {
+  type.of(lmt.lm_train_step(lm.W_U_lm, "the sky is blue", 0.001, 0.001)) == "record"
+}
+
+test "lm train step loss decreases" {
+  let step = lmt.lm_train_step(lm.W_U_lm, "the sky is blue", 0.001, 0.001) in
+  step.loss_delta < 0.0
+}
+
+test "lm train step updates W_U_lm" {
+  let step = lmt.lm_train_step(lm.W_U_lm, "the sky is blue", 0.001, 0.001) in
+  step.W_U_lm.data != lm.W_U_lm.data
+}
+
+test "lm train receipt deterministic" {
+  let a = lmt.lm_train_step_with_receipt(lm.W_U_lm, "the sky is blue", 0.001, 0.001) in
+  let b = lmt.lm_train_step_with_receipt(lm.W_U_lm, "the sky is blue", 0.001, 0.001) in
+  a.receipt == b.receipt
+}
