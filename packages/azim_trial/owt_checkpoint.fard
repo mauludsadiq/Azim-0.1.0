@@ -4,7 +4,12 @@ import("std/fs") as fs
 import("std/str") as str
 import("tensor") as tensor
 
-fn save(W_U, shard_index, avg_loss, receipt, path) {
+fn checkpoint_path(shard_index) {
+  str.concat(["out/checkpoints/shard_", str.from(shard_index), ".json"])
+}
+
+fn save(W_U, shard_index, avg_loss, receipt) {
+  let path = checkpoint_path(shard_index) in
   let record = {
     version: "1.0.0",
     shard_index: shard_index,
@@ -16,14 +21,10 @@ fn save(W_U, shard_index, avg_loss, receipt, path) {
   fs.write_text(path, json.canonicalize(record))
 }
 
-fn checkpoint_path(shard_index) {
-  str.concat(["/tmp/azim_checkpoint_shard_", str.from(shard_index), ".json"])
-}
-
 fn save_checkpoint(W_U, shard_index, avg_loss, receipt) {
-  let path = checkpoint_path(shard_index) in
-  let _ = save(W_U, shard_index, avg_loss, receipt, path) in
-  { saved: true, path: path }
+  let _ = fs.make_dir("out/checkpoints") in
+  let _ = save(W_U, shard_index, avg_loss, receipt) in
+  { saved: true, path: checkpoint_path(shard_index) }
 }
 
-export { save, checkpoint_path, save_checkpoint }
+export { checkpoint_path, save, save_checkpoint }

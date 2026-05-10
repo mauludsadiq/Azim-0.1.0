@@ -41,7 +41,7 @@ fn avg_loss(losses) {
 }
 
 fn train_shard(shard_index, W_U, lr, max_docs) {
-  let shard_path = str.concat(["/tmp/owt_shard_", str.from(shard_index), ".parquet"]) in
+  let shard_path = str.concat(["out/owt_shard_", str.from(shard_index), ".parquet"]) in
   let download = loader.download_shard(shard_index, shard_path) in
   let texts = loader.extract_shard_texts(shard_path, 15, max_docs) in
   let result = train_on_texts(W_U, texts, lr) in

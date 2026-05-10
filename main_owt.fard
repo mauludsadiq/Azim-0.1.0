@@ -1,0 +1,3 @@
+import("packages/azim_trial/owt_full_run") as run
+
+run.full_run_report(80, 0.001, 50)

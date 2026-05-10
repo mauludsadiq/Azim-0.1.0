@@ -28,4 +28,22 @@ fn full_run(shard_count, lr, max_docs_per_shard) {
   })
 }
 
-export { run_shard, full_run }
+fn full_run_report(shard_count, lr, max_docs_per_shard) {
+  let result = full_run(shard_count, lr, max_docs_per_shard) in
+  let final_receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.owt_full_run",
+    version: "1.0.0",
+    shard_count: shard_count,
+    history: result.history
+  })) in
+  {
+    shard_count: shard_count,
+    total_steps: list.fold(result.history, 0, fn(acc, h) { acc + h.steps }),
+    final_avg_loss: list.get(result.history, list.len(result.history) - 1).avg_loss,
+    history: result.history,
+    receipt: final_receipt,
+    ok: true
+  }
+}
+
+export { run_shard, full_run, full_run_report }
