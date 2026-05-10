@@ -1,0 +1,42 @@
+import("std/list") as list
+import("../packages/azim_trial/model") as model
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/weights") as weights
+import("../packages/azim_trial/logits") as logits
+
+test "final verdict is neural not semantic" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let result = model.infer_claim(claim) in
+  result.final_verdict == result.model_label
+}
+
+test "final verdict is not semantic override" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let result = model.infer_claim(claim) in
+  result.final_verdict != result.semantic_verdict ||
+  result.final_verdict == result.model_label
+}
+
+test "logits drive verdict - argmax 0 gives accepted" {
+  let logits_vec = tensor.vector([1.0, 0.0, 0.0]) in
+  let label = model.label_from_logits(logits_vec) in
+  label == "accepted"
+}
+
+test "logits drive verdict - argmax 1 gives rejected" {
+  let logits_vec = tensor.vector([0.0, 1.0, 0.0]) in
+  let label = model.label_from_logits(logits_vec) in
+  label == "rejected"
+}
+
+test "logits drive verdict - argmax 2 gives needs-evidence" {
+  let logits_vec = tensor.vector([0.0, 0.0, 1.0]) in
+  let label = model.label_from_logits(logits_vec) in
+  label == "needs-evidence"
+}
+
+test "semantic verdict kept only as diagnostic" {
+  let claim = { predicate: "has-color", subject: "sky", property: "color", value: "blue" } in
+  let result = model.infer_claim(claim) in
+  result.semantic_verdict == "accepted"
+}

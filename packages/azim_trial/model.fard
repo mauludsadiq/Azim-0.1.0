@@ -10,11 +10,11 @@ import("weights") as weights
 import("semantic") as sem
 
 fn embed_token(token_id) {
-  return weights.embedding_row(token_id)
+  weights.embedding_row(token_id)
 }
 
 fn embed_tokens(ids) {
-  return list.map(ids, fn(id) { embed_token(id) })
+  list.map(ids, fn(id) { embed_token(id) })
 }
 
 fn mean_pool(vectors) {
@@ -22,7 +22,7 @@ fn mean_pool(vectors) {
 }
 
 fn project_sequence(vectors, W) {
-  return list.map(vectors, fn(v) { tensor.matvec(W, tensor.rms_norm(v, 0.000001)) })
+  list.map(vectors, fn(v) { tensor.matvec(W, tensor.rms_norm(v, 0.000001)) })
 }
 
 fn attention(vectors) {
@@ -98,7 +98,7 @@ fn infer_claim(claim) {
   {
     model_label: neural.label,
     semantic_verdict: semantic.evaluation.verdict,
-    final_verdict: semantic.evaluation.verdict,
+    final_verdict: neural.label,
     neural: neural,
     semantic: semantic.evaluation,
     semantic_receipt: semantic.receipt
@@ -108,7 +108,7 @@ fn infer_claim(claim) {
 fn receipt_for_inference(claim, inference) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.model",
-    version: "0.1.0",
+    version: "0.2.0",
     claim: claim,
     inference: inference,
     tokenizer_vocab_sha256: tok.vocab_sha256,
