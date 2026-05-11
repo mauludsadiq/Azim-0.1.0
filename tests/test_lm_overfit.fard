@@ -1,0 +1,16 @@
+import("std/list") as list
+import("../packages/azim_trial/lm_head") as lm
+import("../packages/azim_trial/lm_train") as lmt
+
+let text = "the sky is blue"
+let result = list.fold(list.range(0, 50), { W: lm.W_U_lm, losses: [] }, fn(acc, _) {
+  let step = lmt.lm_train_step(acc.W, text, 0.01, 0.001) in
+  { W: step.W_U_lm, losses: list.append(acc.losses, step.loss_before) }
+})
+
+{
+  first_loss: list.get(result.losses, 0),
+  last_loss: list.get(result.losses, 49),
+  loss_10: list.get(result.losses, 10),
+  loss_25: list.get(result.losses, 25)
+}

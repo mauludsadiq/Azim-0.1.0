@@ -1,0 +1,14 @@
+import("std/list") as list
+import("../packages/azim_trial/lm_head") as lm
+import("../packages/azim_trial/owt_loader") as loader
+import("../packages/azim_trial/lm_owt_train") as owt
+
+let texts = loader.extract_shard_texts("/tmp/owt_0.parquet", 10, 3)
+let result = list.fold(texts, { W: lm.W_U_lm, steps: 0, losses: [] }, fn(acc, text) {
+  if owt.is_clean(text) then
+    let doc = owt.train_doc(acc.W, text, 0.01, 5) in
+    let avg = list.fold(doc.losses, 0.0, fn(a, x) { a + x }) / list.len(doc.losses) in
+    { W: doc.W, steps: acc.steps + 5, losses: list.append(acc.losses, avg) }
+  else acc
+})
+{ steps: result.steps, first: list.get(result.losses, 0), last: list.get(result.losses, list.len(result.losses) - 1) }
