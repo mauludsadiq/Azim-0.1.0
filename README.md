@@ -2,7 +2,7 @@
 
 Deterministic distributed AI training on FARD.
 
-Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 8,560 lines of code.
+Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 9,043 lines of code.
 
 -----
 
@@ -24,31 +24,45 @@ Shard 79:  0.0244
 
 96.8% loss reduction. Every step cryptographically receipted. Audit proof complete.
 
-Checkpoints for all 80 shards are in out/checkpoints/.
+LM objective run in progress — next-token prediction over full vocabulary.
+
+-----
+
+## Status
+
+|Milestone                         |Status |
+|----------------------------------|-------|
+|Deterministic runtime             |done   |
+|Cryptographic receipt chain       |done   |
+|Real gradient descent (SPSA)      |done   |
+|Full OWT training run (classifier)|done   |
+|Neural path authoritative         |done   |
+|Next-token prediction objective   |done   |
+|Autoregressive generation         |done   |
+|LM training on OWT                |running|
+|BPE tokenizer                     |next   |
+|Larger d_model / more layers      |next   |
 
 -----
 
 ## What Azim Does
 
-Azim trains a neural model on real data. It downloads OpenWebText shards from HuggingFace, extracts text, runs gradient descent, receipts every step, checkpoints between shards, and streams through the full 80-shard dataset.
+Azim trains a language model on real data. The neural path is authoritative — the model’s logits determine output, not a hardcoded lookup. It downloads OpenWebText shards, runs next-token prediction, receipts every step, and streams through the full dataset.
 
 The training pipeline:
 
 - Downloads OpenWebText parquet shards from HuggingFace
 - Extracts real web text via strings extraction and quality filtering
-- Truncates documents to 120 characters for tokenization efficiency
-- Tokenizes input text with a fixed greedy vocabulary
+- Tokenizes with a fixed greedy vocabulary (129 tokens)
 - Embeds tokens into distinct 8-dimensional vectors per token ID
 - Runs a transformer block: RMS norm, attention, FFN, residual
-- Computes NLL loss over three-class label logits
-- Computes SPSA gradient over W_U — 2 forward passes per step
-- Updates W_U via SGD with verified loss decrease per step
-- Checkpoints W_U with receipt after each shard
-- Trains RSSM transition matrices with convergence verification
-- Distributes training across nodes with prefix-chained associative scan
-- Supervises with real leakage detection and tower independence probes
+- Computes per-position hidden states
+- Projects to vocab_size (129) logits via W_U_lm
+- Computes NLL loss over next-token targets
+- Updates W_U_lm via SPSA gradient descent
+- Generates text autoregressively via greedy decoding
 - Chains SHA-256 receipts over every computed output
-- Deletes each shard after training to manage disk
+- Checkpoints W_U_lm with receipt after each shard
 
 -----
 
@@ -68,71 +82,53 @@ The training pipeline:
 
 -----
 
+## LM Objective
+
+Next-token prediction over the full vocabulary:
+
+```
+for each position pos in token_ids[0..n-1]:
+    hidden = rms_norm(block(embed(token_ids[0..pos])))
+    logits = W_U_lm . hidden          # shape: vocab_size x 1
+    loss   = NLL(logits, token_ids[pos+1])
+
+grad = SPSA(loss, W_U_lm)
+W_U_lm = W_U_lm - lr * grad
+```
+
+W_U_lm is 129x8 — projects 8-dimensional hidden state to 129-token vocabulary.
+
+-----
+
+## Autoregressive Generation
+
+```
+prompt_ids = tokenize(prompt)
+while steps < max_new_tokens:
+    hidden = block(embed(prompt_ids))
+    logits = W_U_lm . hidden
+    next_id = argmax(logits)
+    if next_id == EOS: stop
+    prompt_ids = append(prompt_ids, next_id)
+```
+
+Greedy decoding. Deterministic. Receipted.
+
+-----
+
 ## Gradient Method
 
-Azim uses SPSA (Simultaneous Perturbation Stochastic Approximation) for W_U:
+SPSA with fixed direction vector:
 
 ```
-d = deterministic +/-1 direction (from weight state hash)
-l_plus  = NLL(W_U + e*d, hidden, label)
-l_minus = NLL(W_U - e*d, hidden, label)
+d = fixed +/-1 direction (precomputed from hash, stable across steps)
+l_plus  = NLL(W + e*d, tokens, pos)
+l_minus = NLL(W - e*d, tokens, pos)
 grad    = ((l_plus - l_minus) / 2e) * d
-W_U     = W_U - lr * grad
+W       = W - lr * grad
 ```
 
-2 forward passes per step. Deterministic direction from weight state.
-
-The RSSM trains W_h against a target state:
-
-```
-s_{t+1} = relu(W_h . s_t + W_x . x_t)
-loss    = ||s_T - target||^2
-W_h     = W_h - lr * finite_diff_grad
-```
-
------
-
-## Shard Streaming
-
-```
-for shard_index in 0..79:
-    curl shard from HuggingFace -> out/
-    strings extraction + quality filter
-    truncate to 120 chars
-    train W_U on up to 50 documents
-    checkpoint W_U + receipt to out/checkpoints/
-    delete shard parquet
-```
-
-80 shards. ~11 minutes per shard. 15 hours total.
-
------
-
-## Distributed Scan
-
-Three nodes chain state across partitions:
-
-```
-node-1: s_0 -> s_1 = transition(batch[0], s_0)
-node-2: s_1 -> s_2 = transition(batch[1], s_1)
-node-3: s_2 -> s_3 = transition(batch[2], s_2)
-```
-
-s_3 is bit-identical to sequential execution. Verified by test.
-
------
-
-## Validator
-
-Three real probes run every 1000 steps:
-
-|Probe       |Method                             |
-|------------|-----------------------------------|
-|Leakage     |RSSM/Tower bridge score comparison |
-|Independence|Tower layer zeroing stability check|
-|Receipt     |SHA-256 prefix verification        |
-
-Backpressure: ok continues, warning adjusts, emergency pauses.
+3 forward passes per step regardless of parameter count.
 
 -----
 
@@ -154,7 +150,7 @@ Receipts chain across steps into a final audit proof.
 
 ## Test Coverage
 
-88 test files. 0 failures.
+98 test files. 0 failures.
 
 |Area                     |Tests|
 |-------------------------|-----|
@@ -162,14 +158,16 @@ Receipts chain across steps into a final audit proof.
 |Tokenizer                |9    |
 |Attention + FFN          |10   |
 |Loss + Gradients         |14   |
-|RSSM (fixed + learned)   |12   |
+|RSSM (fixed + learned)   |18   |
 |Distributed scan         |12   |
 |Validator + backpressure |14   |
 |Receipt + audit chain    |20   |
 |Training run + manifest  |18   |
 |Phase contracts (6, 7, 8)|29   |
 |OWT loader + training    |8    |
-|Integration + other      |308  |
+|LM objective + generation|13   |
+|Neural authority         |6    |
+|Integration + other      |303  |
 
 -----
 
@@ -183,7 +181,10 @@ packages/azim_trial/
   attention.fard
   block.fard
   loss.fard
-  finite_difference_gradient.fard
+  lm_head.fard
+  lm_train.fard
+  lm_owt_train.fard
+  generation_lm.fard
   train_step.fard
   rssm.fard
   distributed_scan.fard
@@ -198,10 +199,13 @@ packages/azim_trial/
   ...
 
 tests/
-  test_*.fard  (88 files)
+  test_*.fard  (98 files)
 
 out/checkpoints/
   shard_0.json .. shard_79.json
+
+out/lm_checkpoints/
+  shard_*.json  (LM objective run)
 ```
 
 -----
@@ -209,12 +213,11 @@ out/checkpoints/
 ## Running
 
 ```
-fardrun test --program tests/test_train_step.fard
-fardrun test --program tests/test_rssm_learned.fard
-fardrun test --program tests/test_owt_loader.fard
-fardrun test --program tests/test_owt_train.fard
+fardrun test --program tests/test_lm_objective.fard
+fardrun test --program tests/test_generation_lm.fard
+fardrun test --program tests/test_neural_authority.fard
+fardrun run  --program main_lm.fard --out out/lm_full_run
 fardrun run  --program main.fard --out out/main_run
-fardrun run  --program main_owt.fard --out out/owt_full_run
 ```
 
 -----
