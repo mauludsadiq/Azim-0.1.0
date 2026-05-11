@@ -1,0 +1,23 @@
+import("std/list") as list
+import("../packages/azim_trial/linalg_bridge") as bridge
+
+test "bytes_to_float zero" {
+  let v = bridge.float_to_vec([0.0]) in
+  bridge.bytes_to_float(list.get(v, 0)) == 0.0
+}
+
+test "fast_matvec identity" {
+  let result = bridge.fast_matvec([1.0,0.0,0.0,1.0], 2, 2, [3.0, 4.0]) in
+  result == [3.0, 4.0]
+}
+
+test "fast_dot" {
+  bridge.fast_dot([1.0, 2.0], [3.0, 4.0]) == 11.0
+}
+
+test "fast_matvec 8x8" {
+  let eye8 = list.build(64, fn(i) { if i % 9 == 0 then 1.0 else 0.0 }) in
+  let v = list.build(8, fn(i) { i + 0.0 }) in
+  let r = bridge.fast_matvec(eye8, 8, 8, v) in
+  list.len(r) == 8
+}

@@ -1,0 +1,29 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/list") as list
+import("std/type") as type
+import("std/float") as float
+
+test "linalg bytes type" {
+  let z = la.zeros(1) in
+  let e = list.get(z, 0) in
+  type.of(e) == "bytes"
+}
+
+test "bytes to hex" {
+  let z = la.zeros(1) in
+  let e = list.get(z, 0) in
+  b.to_hex(e) == "0000000000000000"
+}
+
+test "eye diagonal hex" {
+  let m = la.eye(1) in
+  let e = list.get(m, 0) in
+  let row = list.get(e, 0) in
+  b.to_hex(row) == "000000000000f03f"
+}
+
+test "matvec result is bytes list" {
+  let r = la.matvec(la.eye(2), [1.0, 2.0]) in
+  type.of(list.get(r, 0)) == "bytes"
+}

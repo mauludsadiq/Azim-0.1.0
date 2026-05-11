@@ -4,6 +4,7 @@ import("std/math") as math
 import("std/float") as float
 import("std/json") as json
 import("std/hash") as hash
+import("linalg_bridge") as lb
 
 fn prod(xs) {
   list.fold(xs, 1, fn(acc, x) { acc * x })
@@ -54,7 +55,7 @@ fn get1(v, i) {
 }
 
 fn get2(m, r, c) {
-  let cols = list.get(m.dims, 1)
+  let cols = list.get(m.dims, 1) in
   list.get(m.data, r * cols + c)
 }
 
@@ -71,45 +72,46 @@ fn zip_with(a, b, f) {
 }
 
 fn add(a, b) {
-  zip_with(a, b, fn(x, y) { x + y })
+  tensor(a.dims, list.zip_with(a.data, b.data, fn(x, y) { x + y }))
 }
 
 fn sub(a, b) {
-  zip_with(a, b, fn(x, y) { x - y })
+  tensor(a.dims, list.zip_with(a.data, b.data, fn(x, y) { x - y }))
 }
 
 fn scale(a, s) {
-  map(a, fn(x) { x * s })
+  tensor(a.dims, list.map(a.data, fn(x) { x * s }))
 }
 
 fn dot(a, b) {
-  list.fold(list.range(0, list.len(a.data)), 0.0, fn(acc, i) {
-    acc + list.get(a.data, i) * list.get(b.data, i)
-  })
+  lb.fast_dot(a.data, b.data)
 }
 
 fn row(m, r) {
-  let cols = list.get(m.dims, 1)
+  let cols = list.get(m.dims, 1) in
   vector(list.build(cols, fn(c) { get2(m, r, c) }))
 }
 
 fn col(m, c) {
-  let rows = list.get(m.dims, 0)
+  let rows = list.get(m.dims, 0) in
   vector(list.build(rows, fn(r) { get2(m, r, c) }))
 }
 
 fn matvec(m, v) {
-  let rows = list.get(m.dims, 0)
-  vector(list.build(rows, fn(r) { dot(row(m, r), v) }))
+  let rows = list.get(m.dims, 0) in
+  let cols = list.get(m.dims, 1) in
+  vector(lb.fast_matvec(m.data, rows, cols, v.data))
 }
 
 fn matmul(a, b) {
-  let ar = list.get(a.dims, 0)
-  let bc = list.get(b.dims, 1)
+  let ar = list.get(a.dims, 0) in
+  let ac = list.get(a.dims, 1) in
+  let bc = list.get(b.dims, 1) in
   matrix(ar, bc, list.build(ar * bc, fn(i) {
-    let r = float.to_int(((i + 0.0) / (bc + 0.0)))
-    let c = i % bc
-    dot(row(a, r), col(b, c))
+    let r = float.to_int((i + 0.0) / (bc + 0.0)) in
+    let c = i % bc in
+    lb.fast_dot(list.build(ac, fn(k) { get2(a, r, k) }),
+                list.build(ac, fn(k) { get2(b, k, c) }))
   }))
 }
 
@@ -126,26 +128,26 @@ fn silu(v) {
 }
 
 fn rms_norm(v, eps) {
-  let n = list.len(v.data)
-  let ss = list.fold(v.data, 0.0, fn(acc, x) { acc + x * x })
-  let mean = ss / (n + 0.0)
-  let denom = math.sqrt(mean + eps)
+  let n = list.len(v.data) in
+  let ss = list.fold(v.data, 0.0, fn(acc, x) { acc + x * x }) in
+  let mean = ss / (n + 0.0) in
+  let denom = math.sqrt(mean + eps) in
   map(v, fn(x) { x / denom })
 }
 
 fn softmax(v) {
-  let maxv = list.fold(v.data, list.get(v.data, 0), fn(acc, x) { if x > acc then x else acc })
-  let exps = list.map(v.data, fn(x) { math.exp(x - maxv) })
-  let total = list.fold(exps, 0.0, fn(acc, x) { acc + x })
+  let maxv = list.fold(v.data, list.get(v.data, 0), fn(acc, x) { if x > acc then x else acc }) in
+  let exps = list.map(v.data, fn(x) { math.exp(x - maxv) }) in
+  let total = list.fold(exps, 0.0, fn(acc, x) { acc + x }) in
   vector(list.map(exps, fn(x) { x / total }))
 }
 
 fn argmax(xs) {
-  let init = { max_val: list.get(xs, 0), max_idx: 0 }
+  let init = { max_val: list.get(xs, 0), max_idx: 0 } in
   let result = list.fold(list.range(0, list.len(xs)), init, fn(acc, i) {
-    let v = list.get(xs, i)
+    let v = list.get(xs, i) in
     if v > acc.max_val then { max_val: v, max_idx: i } else acc
-  })
+  }) in
   result.max_idx
 }
 

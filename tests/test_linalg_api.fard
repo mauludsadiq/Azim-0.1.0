@@ -1,0 +1,22 @@
+import("std/linalg") as la
+import("std/type") as type
+
+test "dot signature" {
+  la.dot([1.0, 2.0], [3.0, 4.0]) == 11.0
+}
+
+test "vec_add signature" {
+  la.vec_add([1.0, 2.0], [3.0, 4.0]) == [4.0, 6.0]
+}
+
+test "vec_scale signature" {
+  la.vec_scale([1.0, 2.0], 2.0) == [2.0, 4.0]
+}
+
+test "matvec signature" {
+  type.of(la.matvec([1.0,0.0,0.0,1.0], [2.0, 3.0])) == "list"
+}
+
+test "matvec result" {
+  la.matvec([1.0,0.0,0.0,1.0], [2.0, 3.0]) == [2.0, 3.0]
+}

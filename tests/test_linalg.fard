@@ -1,0 +1,6 @@
+import("std/linalg") as la
+import("std/list") as list
+
+let a = la.zeros(8)
+let b = la.eye(8)
+{ a_len: list.len(a), b_type: "done" }

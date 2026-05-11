@@ -1,0 +1,10 @@
+import("std/linalg") as la
+import("std/list") as list
+import("../packages/azim_trial/tokenizer") as tok
+import("../packages/azim_trial/embedding") as emb
+
+let ids = list.take(tok.tokenize("sky"), 1)
+let vectors = list.map(ids, fn(id) { emb.embed_id(id) })
+let v = list.get(vectors, 0)
+let result = la.matvec(la.eye(8), v.data)
+{ len: list.len(result) }

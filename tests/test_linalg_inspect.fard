@@ -1,0 +1,8 @@
+import("std/linalg") as la
+import("std/json") as json
+
+{
+  eye2: la.eye(2),
+  zeros3: la.zeros(3),
+  matvec_result: la.matvec(la.eye(2), [1.0, 2.0])
+}

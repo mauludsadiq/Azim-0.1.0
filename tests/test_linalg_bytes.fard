@@ -1,0 +1,22 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/list") as list
+import("std/type") as type
+
+test "matvec result element type" {
+  let r = la.matvec(la.eye(2), [1.0, 2.0]) in
+  let e = list.get(r, 0) in
+  e.t == "bytes"
+}
+
+test "bytes to float via from_base64" {
+  let r = la.matvec(la.eye(2), [1.0, 2.0]) in
+  let e = list.get(r, 0) in
+  type.of(e.v) == "text"
+}
+
+test "zeros element" {
+  let z = la.zeros(2) in
+  let e = list.get(z, 0) in
+  e.t == "bytes"
+}

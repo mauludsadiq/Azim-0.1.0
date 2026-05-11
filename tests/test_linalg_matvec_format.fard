@@ -1,0 +1,28 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/list") as list
+import("std/type") as type
+
+test "matvec with eye and float vec" {
+  let m = la.eye(2) in
+  let v = la.zeros(2) in
+  type.of(la.matvec(m, v)) == "list"
+}
+
+test "matvec eye with linalg vec" {
+  let m = la.eye(2) in
+  let v = la.vec_add([1.0, 0.0], la.zeros(2)) in
+  type.of(la.matvec(m, v)) == "list"
+}
+
+test "vec_add returns usable vec for matvec" {
+  let m = la.eye(2) in
+  let v = la.vec_add([1.0, 2.0], [0.0, 0.0]) in
+  let r = la.matvec(m, v) in
+  list.len(r) == 2
+}
+
+test "float to linalg vec via vec_add with zeros" {
+  let v = la.vec_add([3.0, 4.0], la.zeros(2)) in
+  type.of(list.get(v, 0)) == "bytes"
+}

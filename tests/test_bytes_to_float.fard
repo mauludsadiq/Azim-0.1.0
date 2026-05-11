@@ -1,0 +1,31 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/float") as float
+import("std/list") as list
+import("std/type") as type
+import("std/codec") as codec
+
+test "bytes from hex roundtrip" {
+  let one_bytes = b.from_hex("000000000000f03f") in
+  b.to_hex(one_bytes) == "000000000000f03f"
+}
+
+test "linalg dot returns bytes" {
+  let r = la.dot(la.zeros(2), la.zeros(2)) in
+  type.of(r) == "bytes"
+}
+
+test "dot zero result hex" {
+  let r = la.dot(la.zeros(2), la.zeros(2)) in
+  b.to_hex(r) == "0000000000000000"
+}
+
+test "float from_text on hex" {
+  let r = la.matvec(la.eye(1), [2.5]) in
+  let e = list.get(r, 0) in
+  type.of(b.to_hex(e)) == "text"
+}
+
+test "norm returns bytes" {
+  type.of(la.norm(la.zeros(3))) == "bytes"
+}

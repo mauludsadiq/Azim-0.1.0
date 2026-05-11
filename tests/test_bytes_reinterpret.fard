@@ -1,0 +1,22 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/bits") as bits
+import("std/list") as list
+import("std/type") as type
+import("std/float") as float
+
+test "bytes to list of ints" {
+  let one = list.get(la.matvec(la.eye(1), [1.0]), 0) in
+  let as_list = b.to_list(one) in
+  list.len(as_list) == 8
+}
+
+test "known bytes decode to 1.0" {
+  let one = list.get(la.matvec(la.eye(1), [1.0]), 0) in
+  let as_list = b.to_list(one) in
+  as_list == [0, 0, 0, 0, 0, 0, 240, 63]
+}
+
+test "float from_int on byte value" {
+  type.of(float.from_int(63)) == "float"
+}

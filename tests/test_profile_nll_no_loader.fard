@@ -1,0 +1,8 @@
+import("std/list") as list
+import("../packages/azim_trial/lm_head") as lm
+import("../packages/azim_trial/lm_train") as lmt
+import("../packages/azim_trial/tokenizer") as tok
+
+let token_ids = list.take(tok.tokenize("the sky is blue and the grass is green"), 16)
+let loss = lmt.nll_at_pos(lm.W_U_lm, token_ids, 0)
+{ loss: loss }

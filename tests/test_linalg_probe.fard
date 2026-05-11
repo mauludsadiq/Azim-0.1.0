@@ -1,0 +1,27 @@
+import("std/linalg") as la
+import("std/type") as type
+import("std/list") as list
+
+test "zeros type" {
+  type.of(la.zeros(4)) == "list"
+}
+
+test "eye type" {
+  type.of(la.eye(2)) == "list"
+}
+
+test "eye content" {
+  la.eye(2) == [[1.0, 0.0], [0.0, 1.0]]
+}
+
+test "dot with eye row" {
+  let e = la.eye(2) in
+  let row = list.get(e, 0) in
+  type.of(la.dot(row, row)) == "float"
+}
+
+test "matvec with eye" {
+  let m = la.eye(2) in
+  let v = [1.0, 2.0] in
+  type.of(la.matvec(m, v)) == "list"
+}

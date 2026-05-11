@@ -1,0 +1,71 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("owt_loader") as loader
+import("lm_train") as lmt
+import("lm_head") as lm
+
+fn is_clean(text) {
+  let words = str.split(text, " ") in
+  list.len(words) >= 10 && str.len(text) <= 500
+}
+
+fn train_shard(shard_index, W_U_lm, lr, max_docs) {
+  let shard_path = str.concat(["out/owt_shard_", str.from(shard_index), ".parquet"]) in
+  let _ = loader.download_shard(shard_index, shard_path) in
+  let texts = loader.extract_shard_texts(shard_path, 10, max_docs) in
+  let result = list.fold(texts, { W: W_U_lm, steps: 0, losses: [] }, fn(acc, text) {
+    if is_clean(text) then
+      let step = lmt.lm_train_step(acc.W, text, lr, 0.001) in
+      { W: step.W_U_lm, steps: acc.steps + 1, losses: list.append(acc.losses, step.loss_before) }
+    else acc
+  }) in
+  let avg_loss = if result.steps == 0 then 0.0 else
+    list.fold(result.losses, 0.0, fn(a, x) { a + x }) / result.steps in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.lm_owt_train",
+    version: "1.0.0",
+    shard_index: shard_index,
+    steps: result.steps,
+    avg_loss: avg_loss
+  })) in
+  let ckpt = json.canonicalize({
+    version: "1.0.0",
+    shard_index: shard_index,
+    avg_loss: avg_loss,
+    steps: result.steps,
+    receipt: receipt,
+    W_U_lm_dims: result.W.dims,
+    W_U_lm_data: result.W.data
+  }) in
+  let _ = fs.make_dir("out/lm_checkpoints") in
+  let _ = fs.write_text(str.concat(["out/lm_checkpoints/shard_", str.from(shard_index), ".json"]), ckpt) in
+  let _ = loader.delete_shard(shard_path) in
+  { shard_index: shard_index, steps: result.steps, avg_loss: avg_loss, W_U_lm: result.W, receipt: receipt }
+}
+
+fn full_lm_run(shard_count, lr, max_docs_per_shard) {
+  let indices = list.range(0, shard_count) in
+  let result = list.fold(indices, { W: lm.W_U_lm, history: [] }, fn(acc, idx) {
+    let r = train_shard(idx, acc.W, lr, max_docs_per_shard) in
+    { W: r.W_U_lm, history: list.append(acc.history, { shard: r.shard_index, steps: r.steps, avg_loss: r.avg_loss, receipt: r.receipt }) }
+  }) in
+  let final_receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.lm_owt_full_run",
+    version: "1.0.0",
+    shard_count: shard_count,
+    history: result.history
+  })) in
+  {
+    shard_count: shard_count,
+    total_steps: list.fold(result.history, 0, fn(a, h) { a + h.steps }),
+    final_avg_loss: list.get(result.history, list.len(result.history) - 1).avg_loss,
+    history: result.history,
+    receipt: final_receipt,
+    ok: true
+  }
+}
+
+export { is_clean, train_shard, full_lm_run }

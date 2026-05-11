@@ -1,0 +1,64 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/bits") as bits
+import("std/list") as list
+import("std/math") as math
+import("std/type") as type
+
+fn bytes_to_float(bs) {
+  let raw = b.to_list(bs) in
+  let b0 = list.get(raw, 0) in
+  let b1 = list.get(raw, 1) in
+  let b2 = list.get(raw, 2) in
+  let b3 = list.get(raw, 3) in
+  let b4 = list.get(raw, 4) in
+  let b5 = list.get(raw, 5) in
+  let b6 = list.get(raw, 6) in
+  let b7 = list.get(raw, 7) in
+  let sign = bits.bshr(b7, 7) in
+  let exp_raw = bits.bor(bits.bshl(bits.band(b7, 127), 4), bits.bshr(b6, 4)) in
+  let exp = exp_raw - 1023 in
+  let frac =
+    (bits.band(b6, 15) + 0.0) / 16.0 +
+    (b5 + 0.0) / 4096.0 +
+    (b4 + 0.0) / 1048576.0 +
+    (b3 + 0.0) / 268435456.0 +
+    (b2 + 0.0) / 68719476736.0 +
+    (b1 + 0.0) / 17592186044416.0 +
+    (b0 + 0.0) / 4503599627370496.0
+  in
+  let mantissa = 1.0 + frac in
+  let magnitude = mantissa * math.pow(2.0, exp + 0.0) in
+  if sign == 1 then 0.0 - magnitude else magnitude
+}
+
+test "decode 0.0" {
+  let v = la.vec_add([0.0], la.zeros(1)) in
+  let e = list.get(v, 0) in
+  bytes_to_float(e) == 0.0
+}
+
+test "decode 1.0" {
+  let v = la.vec_add([1.0], la.zeros(1)) in
+  let e = list.get(v, 0) in
+  bytes_to_float(e) == 1.0
+}
+
+test "decode 2.0" {
+  let v = la.vec_add([2.0], la.zeros(1)) in
+  let e = list.get(v, 0) in
+  bytes_to_float(e) == 2.0
+}
+
+test "decode 3.5" {
+  let v = la.vec_add([3.5], la.zeros(1)) in
+  let e = list.get(v, 0) in
+  bytes_to_float(e) == 3.5
+}
+
+test "matvec result decodable" {
+  let m = la.eye(2) in
+  let v = la.vec_add([5.0, 7.0], la.zeros(2)) in
+  let r = la.matvec(m, v) in
+  bytes_to_float(list.get(r, 0)) == 5.0
+}

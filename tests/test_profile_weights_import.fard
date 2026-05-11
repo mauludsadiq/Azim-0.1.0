@@ -1,0 +1,2 @@
+import("../packages/azim_trial/weights") as w
+{ d: w.model_config.d_model }

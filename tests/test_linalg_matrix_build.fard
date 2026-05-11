@@ -1,0 +1,38 @@
+import("std/linalg") as la
+import("std/list") as list
+import("std/type") as type
+
+fn float_to_vec(xs) {
+  la.vec_add(xs, la.zeros(list.len(xs)))
+}
+
+fn float_list_to_matrix(rows, cols, data) {
+  list.build(rows, fn(r) {
+    float_to_vec(list.build(cols, fn(c) { list.get(data, r * cols + c) }))
+  })
+}
+
+test "float_to_vec produces bytes list" {
+  let v = float_to_vec([1.0, 2.0, 3.0]) in
+  type.of(list.get(v, 0)) == "bytes"
+}
+
+test "matrix build produces list of vecs" {
+  let m = float_list_to_matrix(2, 2, [1.0, 0.0, 0.0, 1.0]) in
+  list.len(m) == 2
+}
+
+test "matvec with built matrix" {
+  let m = float_list_to_matrix(2, 2, [1.0, 0.0, 0.0, 1.0]) in
+  let v = float_to_vec([3.0, 4.0]) in
+  let r = la.matvec(m, v) in
+  list.len(r) == 2
+}
+
+test "matvec result extractable via dot" {
+  let m = float_list_to_matrix(2, 2, [1.0, 0.0, 0.0, 1.0]) in
+  let v = float_to_vec([3.0, 4.0]) in
+  let r = la.matvec(m, v) in
+  let first = la.dot(r, float_to_vec([1.0, 0.0])) in
+  type.of(first) == "bytes"
+}

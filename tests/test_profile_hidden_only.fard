@@ -1,0 +1,10 @@
+import("std/list") as list
+import("../packages/azim_trial/lm_head") as lm
+import("../packages/azim_trial/owt_loader") as loader
+import("../packages/azim_trial/tokenizer") as tok
+
+let base = loader.extract_shard_texts("/tmp/owt_0.parquet", 1, 1)
+let tiny = list.get(base, 0)
+let token_ids = list.take(tok.tokenize(tiny), 1)
+let hidden = lm.hidden_for_tokens(token_ids)
+{ dims: hidden.dims, first: list.get(hidden.data, 0) }

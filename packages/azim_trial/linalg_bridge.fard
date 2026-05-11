@@ -1,0 +1,67 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/bits") as bits
+import("std/list") as list
+import("std/math") as math
+
+fn bytes_to_float(bs) {
+  let raw = b.to_list(bs) in
+  let b7 = list.get(raw, 7) in
+  let b6 = list.get(raw, 6) in
+  let b5 = list.get(raw, 5) in
+  let b4 = list.get(raw, 4) in
+  let b3 = list.get(raw, 3) in
+  let b2 = list.get(raw, 2) in
+  let b1 = list.get(raw, 1) in
+  let b0 = list.get(raw, 0) in
+  let sign = bits.bshr(b7, 7) in
+  let exp_raw = bits.bor(bits.bshl(bits.band(b7, 127), 4), bits.bshr(b6, 4)) in
+  if exp_raw == 0 then 0.0 else
+  let exp = exp_raw - 1023 in
+  let frac =
+    (bits.band(b6, 15) + 0.0) / 16.0 +
+    (b5 + 0.0) / 4096.0 +
+    (b4 + 0.0) / 1048576.0 +
+    (b3 + 0.0) / 268435456.0 +
+    (b2 + 0.0) / 68719476736.0 +
+    (b1 + 0.0) / 17592186044416.0 +
+    (b0 + 0.0) / 4503599627370496.0
+  in
+  let mantissa = 1.0 + frac in
+  let magnitude = mantissa * math.pow(2.0, exp + 0.0) in
+  if sign == 1 then 0.0 - magnitude else magnitude
+}
+
+fn float_to_vec(xs) {
+  la.vec_add(xs, la.zeros(list.len(xs)))
+}
+
+fn float_list_to_la_matrix(rows, cols, data) {
+  list.build(rows, fn(r) {
+    float_to_vec(list.build(cols, fn(c) { list.get(data, r * cols + c) }))
+  })
+}
+
+fn la_vec_to_floats(v) {
+  list.map(v, fn(e) { bytes_to_float(e) })
+}
+
+fn fast_matvec(m_data, m_rows, m_cols, v_data) {
+  let la_m = float_list_to_la_matrix(m_rows, m_cols, m_data) in
+  let la_v = float_to_vec(v_data) in
+  let la_r = la.matvec(la_m, la_v) in
+  la_vec_to_floats(la_r)
+}
+
+fn fast_dot(a_data, b_data) {
+  bytes_to_float(la.dot(a_data, b_data))
+}
+
+export {
+  bytes_to_float,
+  float_to_vec,
+  float_list_to_la_matrix,
+  la_vec_to_floats,
+  fast_matvec,
+  fast_dot
+}

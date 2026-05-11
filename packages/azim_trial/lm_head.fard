@@ -2,6 +2,7 @@ import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
 import("std/math") as math
+import("std/fs") as fs
 import("tensor") as tensor
 import("tokenizer") as tok
 import("weights") as weights
@@ -11,15 +12,8 @@ import("block") as block
 let vocab_size = tok.vocab_size()
 let d_model = weights.model_config.d_model
 
-fn det_val(seed, i) {
-  let x = (seed * 1664525 + i * 1013904223) % 2147483648 in
-  let f = (x % 1000) + 0.0 in
-  (f / 500.0) - 1.0
-}
-
-let W_U_lm = tensor.matrix(vocab_size, d_model,
-  list.build(vocab_size * d_model, fn(i) { det_val(909, i) })
-)
+let _w_raw = json.decode(fs.read_text("out/weights/W_U_lm_init.json"))
+let W_U_lm = tensor.matrix(list.get(_w_raw.dims, 0), list.get(_w_raw.dims, 1), _w_raw.data)
 
 fn hidden_for_tokens(token_ids) {
   let vectors = list.map(token_ids, fn(id) { emb.embed_id(id) }) in
@@ -74,7 +68,7 @@ fn predict_next(token_ids) {
 fn lm_head_receipt(token_ids, loss) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.lm_head",
-    version: "1.0.0",
+    version: "1.1.0",
     token_ids: token_ids,
     loss: loss
   }))

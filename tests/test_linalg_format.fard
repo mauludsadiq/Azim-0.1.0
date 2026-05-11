@@ -1,0 +1,29 @@
+import("std/linalg") as la
+import("std/list") as list
+import("std/type") as type
+
+test "eye 2 content" {
+  la.eye(2) == [1.0, 0.0, 0.0, 1.0]
+}
+
+test "matvec eye result" {
+  let m = la.eye(2) in
+  la.matvec(m, [1.0, 2.0]) == [1.0, 2.0]
+}
+
+test "dot flat lists" {
+  la.dot([1.0, 2.0], [3.0, 4.0]) == 11.0
+}
+
+test "vec_add flat" {
+  la.vec_add([1.0, 2.0], [3.0, 4.0]) == [4.0, 6.0]
+}
+
+test "mat_scale" {
+  la.mat_scale(la.eye(2), 2.0) == [2.0, 0.0, 0.0, 2.0]
+}
+
+test "matvec 3x3" {
+  let m = la.eye(3) in
+  la.matvec(m, [1.0, 2.0, 3.0]) == [1.0, 2.0, 3.0]
+}

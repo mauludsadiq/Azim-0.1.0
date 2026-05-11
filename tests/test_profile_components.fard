@@ -1,0 +1,12 @@
+import("std/list") as list
+import("../packages/azim_trial/tokenizer") as tok
+import("../packages/azim_trial/embedding") as emb
+import("../packages/azim_trial/weights") as weights
+import("../packages/azim_trial/tensor") as tensor
+
+let ids = list.take(tok.tokenize("sky"), 1)
+let vectors = list.map(ids, fn(id) { emb.embed_id(id) })
+let v = list.get(vectors, 0)
+
+let wq_result = tensor.matvec(weights.W_Q, v)
+{ done: true, wq_dims: wq_result.dims }

@@ -1,0 +1,4 @@
+import("std/list") as list
+import("../packages/azim_trial/lm_head") as lm
+
+{ vocab_size: lm.vocab_size }

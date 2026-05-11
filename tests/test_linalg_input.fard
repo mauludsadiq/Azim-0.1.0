@@ -1,0 +1,28 @@
+import("std/linalg") as la
+import("std/list") as list
+import("std/type") as type
+
+test "matvec accepts float lists" {
+  let m = [1.0, 0.0, 0.0, 1.0] in
+  let v = [2.0, 3.0] in
+  type.of(la.matvec(m, v)) == "list"
+}
+
+test "dot accepts float lists" {
+  type.of(la.dot([1.0, 2.0], [3.0, 4.0])) == "bytes"
+}
+
+test "vec_add accepts float lists" {
+  type.of(la.vec_add([1.0, 2.0], [3.0, 4.0])) == "list"
+}
+
+test "matvec float result first element" {
+  let r = la.matvec([1.0, 0.0, 0.0, 1.0], [2.0, 3.0]) in
+  let e = list.get(r, 0) in
+  type.of(e) == "bytes"
+}
+
+test "matvec 2x2 identity on float list" {
+  let r = la.matvec([1.0, 0.0, 0.0, 1.0], [2.0, 3.0]) in
+  list.len(r) == 2
+}

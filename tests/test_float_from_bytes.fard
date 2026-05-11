@@ -1,0 +1,25 @@
+import("std/linalg") as la
+import("std/bytes") as b
+import("std/float") as float
+import("std/list") as list
+import("std/type") as type
+
+test "from_base64 exists" {
+  let z = la.zeros(1) in
+  let e = list.get(z, 0) in
+  type.of(b.to_base64(e)) == "text"
+}
+
+test "float from hex 1.0" {
+  let one = list.get(la.matvec(la.eye(1), [1.0]), 0) in
+  b.to_hex(one) == "000000000000f03f"
+}
+
+test "float from hex 2.0" {
+  let two = list.get(la.matvec(la.eye(1), [2.0]), 0) in
+  b.to_hex(two) == "0000000000000040"
+}
+
+test "float parse from text" {
+  type.of(float.parse("1.0")) == "record"
+}

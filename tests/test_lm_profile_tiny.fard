@@ -1,0 +1,17 @@
+import("std/list") as list
+import("../packages/azim_trial/lm_head") as lm
+import("../packages/azim_trial/lm_train") as lmt
+import("../packages/azim_trial/owt_loader") as loader
+
+let base = loader.extract_shard_texts("/tmp/owt_0.parquet", 1, 1)
+let tiny = list.get(base, 0)
+let texts = [tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny, tiny]
+let result = list.fold(texts, { W: lm.W_U_lm, steps: 0, losses: [] }, fn(acc, text) {
+  let step = lmt.lm_train_step(acc.W, text, 0.001, 0.001) in
+  {
+    W: step.W_U_lm,
+    steps: acc.steps + 1,
+    losses: list.append(acc.losses, step.loss_before)
+  }
+})
+{ steps: result.steps, first_loss: list.get(result.losses, 0), last_loss: list.get(result.losses, result.steps - 1) }
