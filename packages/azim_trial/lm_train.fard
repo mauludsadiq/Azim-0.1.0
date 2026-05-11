@@ -6,66 +6,58 @@ import("tensor") as tensor
 import("tokenizer") as tok
 import("lm_head") as lm
 
-fn perturb_W_U_lm_at(W, index, delta) {
-  tensor.matrix(list.get(W.dims, 0), list.get(W.dims, 1),
-    list.build(list.len(W.data), fn(i) {
-      if i == index then list.get(W.data, i) + delta
-      else list.get(W.data, i)
-    })
-  )
+let n_params = list.len(lm.W_U_lm.data)
+
+let fixed_direction = tensor.matrix(
+  list.get(lm.W_U_lm.dims, 0),
+  list.get(lm.W_U_lm.dims, 1),
+  list.build(n_params, fn(i) {
+    let h = hash.sha256_text(json.canonicalize({ seed: "lm_spsa_v1", i: i })) in
+    let c = str.slice(h, 7, 8) in
+    if c == "0" || c == "1" || c == "2" || c == "3" ||
+       c == "4" || c == "5" || c == "6" || c == "7"
+    then 1.0 else -1.0
+  })
+)
+
+fn nll_at_pos(W_U_lm, token_ids, pos) {
+  let prefix = list.take(token_ids, pos + 1) in
+  let hidden = lm.hidden_for_tokens(prefix) in
+  let logits = tensor.matvec(W_U_lm, hidden) in
+  let target = list.get(token_ids, pos + 1) in
+  lm.nll_token(logits, target)
 }
 
-fn lm_loss_with_W(W_U_lm, token_ids) {
+fn pick_pos(token_ids, step_index) {
   let n = list.len(token_ids) in
-  if n < 2 then 0.0 else
-  let positions = list.range(0, n - 1) in
-  let losses = list.map(positions, fn(pos) {
-    let prefix = list.take(token_ids, pos + 1) in
-    let hidden = lm.hidden_for_tokens(prefix) in
-    let logits = tensor.matvec(W_U_lm, hidden) in
-    let target = list.get(token_ids, pos + 1) in
-    lm.nll_token(logits, target)
-  }) in
-  list.fold(losses, 0.0, fn(acc, x) { acc + x }) / list.len(losses)
-}
-
-fn spsa_direction(W, seed) {
-  let n = list.len(W.data) in
-  tensor.matrix(list.get(W.dims, 0), list.get(W.dims, 1),
-    list.build(n, fn(i) {
-      let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
-      let c = str.slice(h, 7, 8) in
-      if c == "0" || c == "1" || c == "2" || c == "3" ||
-         c == "4" || c == "5" || c == "6" || c == "7"
-      then 1.0 else -1.0
-    })
-  )
-}
-
-fn spsa_gradient_lm(W_U_lm, token_ids, epsilon) {
-  let n = list.len(W_U_lm.data) in
-  let seed = hash.sha256_text(json.canonicalize({ w0: list.get(W_U_lm.data, 0), w1: list.get(W_U_lm.data, 1) })) in
-  let d = spsa_direction(W_U_lm, seed) in
-  let W_plus  = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
-    list.build(n, fn(i) { list.get(W_U_lm.data, i) + epsilon * list.get(d.data, i) })) in
-  let W_minus = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
-    list.build(n, fn(i) { list.get(W_U_lm.data, i) - epsilon * list.get(d.data, i) })) in
-  let l_plus  = lm_loss_with_W(W_plus,  token_ids) in
-  let l_minus = lm_loss_with_W(W_minus, token_ids) in
-  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
-  tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
-    list.build(n, fn(i) { scale * list.get(d.data, i) }))
+  if n < 2 then 0 else
+  step_index % (n - 1)
 }
 
 fn lm_train_step(W_U_lm, text, lr, epsilon) {
-  let token_ids = tok.tokenize(text) in
-  let loss_before = lm_loss_with_W(W_U_lm, token_ids) in
-  let grad = spsa_gradient_lm(W_U_lm, token_ids, epsilon) in
+  let token_ids = list.take(tok.tokenize(text), 16) in
+  let n = list.len(token_ids) in
+  if n < 2 then { loss_before: 0.0, loss_after: 0.0, loss_delta: 0.0, W_U_lm: W_U_lm } else
+  let pos = 0 in
+  let loss_before = nll_at_pos(W_U_lm, token_ids, pos) in
+  let W_plus = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
+    list.build(n_params, fn(i) {
+      list.get(W_U_lm.data, i) + epsilon * list.get(fixed_direction.data, i)
+    })) in
+  let W_minus = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
+    list.build(n_params, fn(i) {
+      list.get(W_U_lm.data, i) - epsilon * list.get(fixed_direction.data, i)
+    })) in
+  let l_plus  = nll_at_pos(W_plus,  token_ids, pos) in
+  let l_minus = nll_at_pos(W_minus, token_ids, pos) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
   let flat_W = tensor.vector(W_U_lm.data) in
-  let flat_g = tensor.vector(grad.data) in
-  let updated_flat = tensor.sub(flat_W, tensor.scale(flat_g, lr)) in
+  let grad_flat = tensor.vector(list.build(n_params, fn(i) {
+    scale * list.get(fixed_direction.data, i)
+  })) in
+  let updated_flat = tensor.sub(flat_W, tensor.scale(grad_flat, lr)) in
   let W_updated = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1), updated_flat.data) in
-  let loss_after = lm_loss_with_W(W_updated, token_ids) in
+  let loss_after = nll_at_pos(W_updated, token_ids, pos) in
   {
     loss_before: loss_before,
     loss_after: loss_after,
@@ -77,7 +69,7 @@ fn lm_train_step(W_U_lm, text, lr, epsilon) {
 fn lm_train_receipt(step) {
   hash.sha256_text(json.canonicalize({
     component: "azim_trial.lm_train",
-    version: "1.0.0",
+    version: "1.2.0",
     loss_before: step.loss_before,
     loss_after: step.loss_after
   }))
@@ -90,8 +82,8 @@ fn lm_train_step_with_receipt(W_U_lm, text, lr, epsilon) {
 }
 
 export {
-  lm_loss_with_W,
-  spsa_gradient_lm,
+  fixed_direction,
+  nll_at_pos,
   lm_train_step,
   lm_train_receipt,
   lm_train_step_with_receipt
