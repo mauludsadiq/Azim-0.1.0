@@ -1,0 +1,2 @@
+import("packages/azim_code/tokenizer") as tok
+tok.vocab_size()
