@@ -1,0 +1,11 @@
+import("packages/azim_trial/tokenizer") as tok
+
+{
+  token_45: tok.token_at(45),
+  token_122: tok.token_at(122),
+  token_126: tok.token_at(126),
+  token_4: tok.token_at(4),
+  token_3: tok.token_at(3),
+  token_2: tok.token_at(2),
+  token_29: tok.token_at(29)
+}
