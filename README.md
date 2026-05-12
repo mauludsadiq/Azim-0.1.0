@@ -20,27 +20,28 @@ Shard 79:  0.0244
 
 96.8% loss reduction. Every step cryptographically receipted.
 
-LM objective run (next-token prediction over 129-token vocabulary). 62/80 shards complete. Loss trend: -0.021 per shard.
+LM objective run (next-token prediction). 62/80 shards complete. Loss trend: -0.021 per shard.
 
 -----
 
 ## Status
 
-|Milestone                         |Status                |
-|----------------------------------|----------------------|
-|Deterministic runtime             |done                  |
-|Cryptographic receipt chain       |done                  |
-|Real gradient descent (SPSA)      |done                  |
-|Full OWT training run (classifier)|done                  |
-|Neural path authoritative         |done                  |
-|Next-token prediction objective   |done                  |
-|Autoregressive generation         |done                  |
-|linalg native ops (28x speedup)   |done                  |
-|LM training on OWT                |running — 62/80 shards|
-|Verifier-gated self-training loop |done                  |
-|Scale gate                        |done                  |
-|BPE tokenizer                     |next                  |
-|Larger d_model / more layers      |next                  |
+|Milestone                               |Status                |
+|----------------------------------------|----------------------|
+|Deterministic runtime                   |done                  |
+|Cryptographic receipt chain             |done                  |
+|Real gradient descent (SPSA)            |done                  |
+|Full OWT training run (classifier)      |done                  |
+|Neural path authoritative               |done                  |
+|Next-token prediction objective         |done                  |
+|Autoregressive generation               |done                  |
+|linalg native ops (28x speedup)         |done                  |
+|Structural tokenizer (language-agnostic)|done                  |
+|Verifier-gated self-training loop       |done                  |
+|Scale gate                              |done                  |
+|LM training on OWT                      |running — 62/80 shards|
+|BPE tokenizer                           |next                  |
+|Larger d_model / more layers            |next                  |
 
 -----
 
@@ -53,19 +54,71 @@ Two training pipelines:
 **OWT Pipeline** — trains on real web text:
 
 - Downloads OpenWebText parquet shards from HuggingFace
-- Extracts real web text, tokenizes, trains W_U_lm via SPSA
-- Checkpoints W_U_lm with receipt after each shard
+- Extracts and tokenizes real web text
+- Trains W_U_lm via SPSA gradient descent
+- Checkpoints with receipt after each shard
 - Generates text autoregressively via greedy decoding
 
-**Azim-Code Pipeline** — trains on its own verified source code:
+**Azim-Code Pipeline** — trains on verified source code:
 
-- Packs FARD source files into tokenized training corpus
-- Generates FARD code candidates
-- Executes each candidate via fardrun — real execution, not simulation
+- Packs source files into tokenized training corpus
+- Generates code candidates
+- Executes each candidate via fardrun — real execution
 - Accepts candidates that run and verify
-- Trains W_U_lm on accepted corpus only
+- Trains on accepted corpus only
 - Produces retraining manifest with full cryptographic audit chain
 - Gates scale decisions on measured loss decrease + verified receipts
+
+-----
+
+## Structural Tokenizer
+
+Azim includes a language-agnostic structural tokenizer (66 tokens) that understands code at the syntactic level rather than character level.
+
+Token classes:
+
+```
+Keywords:   let  fn  if  then  else  import  as  export
+            match  while  return  true  false  null  ...
+Operators:  !=  ==  <=  >=  &&  ||  ->  =>  |>  ?.  ??  ...
+            (  )  {  }  [  ]  ,  :  .  +  -  *  /  =  %  |  <  >
+Classes:    <IDENT>  <INT>  <FLOAT>  <STRING>  <BT_STRING>
+            <DOC>  <COMMENT>  <NL>  <WS>
+```
+
+Features:
+
+- Scans identifiers, numbers (int/float/scientific), strings (quoted/backtick), comments
+- Unknown identifiers map to <IDENT> rather than <UNK> — structure is preserved
+- Works on any C-like syntax: FARD, Python, JavaScript, Rust, Go
+- Every tokenization produces a SHA-256 receipt over input + output + vocab hash
+- Used by the Azim-Code self-training pipeline
+
+-----
+
+## Verifier-Gated Self-Training
+
+Azim trains on its own verified outputs:
+
+```
+pack source files -> tokenized corpus (structural tokenizer)
+generate code candidates
+execute each candidate via fardrun
+accept if execution succeeds + receipt verifies
+train W_U_lm on accepted corpus only
+produce retraining manifest (full audit chain)
+scale gate: require loss decrease + N accepted + all receipts
+```
+
+Scale gate result:
+
+```
+loss_before: 5.831
+loss_after:  5.827
+accepted:    3/3
+receipts:    3/3
+decision:    PASS
+```
 
 -----
 
@@ -82,35 +135,7 @@ Two training pipelines:
 |6    |Distributed Training — three-node cluster with real RSSM train steps      |
 |7    |Async Validator — leakage probe, tower independence, backpressure control |
 |8    |Full Run + Audit Proof — end-to-end receipt chain with final proof        |
-|Code |Verifier-gated self-training on FARD source                               |
-
------
-
-## Verifier-Gated Self-Training
-
-Azim trains on its own verified outputs:
-
-```
-pack FARD source files -> tokenized corpus
-generate FARD candidates
-execute each candidate via fardrun
-accept if execution succeeds + receipt verifies
-train W_U_lm on accepted corpus
-produce retraining manifest (full audit chain)
-scale gate: require loss decrease + N accepted + all receipts
-```
-
-Scale gate result:
-
-```
-loss_before: 5.831
-loss_after:  5.827
-accepted:    3/3
-receipts:    3/3
-decision:    PASS
-```
-
-Every input is SHA-256 hashed. Every generation has a run receipt and verify receipt. The full provenance chain from source files to trained weights is captured in one auditable document.
+|Code |Verifier-gated self-training on source code                               |
 
 -----
 
@@ -126,9 +151,7 @@ grad    = ((l_plus - l_minus) / 2e) * d
 W       = W - lr * grad
 ```
 
-3 forward passes per step. Direction rotates every step via weight state hash.
-
-Native linalg ops via std/linalg — 28x speedup over interpreted tensor operations.
+3 forward passes per step. Native linalg ops — 28x speedup over interpreted tensor ops.
 
 -----
 
@@ -155,7 +178,7 @@ Receipts chain across steps into a final audit proof.
 |Area                     |Tests|
 |-------------------------|-----|
 |Tensor core + linalg     |20   |
-|Tokenizer                |9    |
+|Tokenizer (trial)        |9    |
 |Attention + FFN          |10   |
 |Loss + Gradients         |14   |
 |RSSM (fixed + learned)   |18   |
@@ -185,10 +208,11 @@ packages/azim_trial/       — core LM training system
   ...
 
 packages/azim_code/        — verifier-gated self-training
-  corpus_packer.fard       — pack FARD source to JSONL
+  tokenizer.fard           — 66-token structural tokenizer (language-agnostic)
+  corpus_packer.fard       — pack source files to JSONL
   generation_wrapper.fard  — generate + execute + verify candidates
   accepted_dataset.fard    — filter to accepted corpus
-  code_train_adapter.fard  — train on verified FARD code
+  code_train_adapter.fard  — train on verified code
   retraining_manifest.fard — full audit chain document
   scale_gate.fard          — gate scale decisions on evidence
 
@@ -196,7 +220,7 @@ tests/
   test_*.fard  (141 files)
 
 out/checkpoints/           — classifier run (80 shards)
-out/lm_checkpoints2/       — LM run (62/80 shards)
+out/lm_checkpoints2/       — LM run (62/80 shards, in progress)
 ```
 
 -----
