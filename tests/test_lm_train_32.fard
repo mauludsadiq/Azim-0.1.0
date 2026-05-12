@@ -1,0 +1,28 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/weights_32") as w
+import("../packages/azim_trial/lm_train_32") as lmt32
+
+let token_ids = [2, 10, 20, 30, 40, 3]
+
+test "nll_at_pos returns float" {
+  type.of(lmt32.nll_at_pos(w.W_U_lm, token_ids, 0)) == "float"
+}
+
+test "nll_at_pos is positive" {
+  lmt32.nll_at_pos(w.W_U_lm, token_ids, 0) > 0.0
+}
+
+test "train step returns record" {
+  type.of(lmt32.lm_train_step(w.W_U_lm, token_ids, 0.001, 0.0001, 0)) == "record"
+}
+
+test "train step loss decreases" {
+  let step = lmt32.lm_train_step(w.W_U_lm, token_ids, 0.001, 0.0001, 0) in
+  step.loss_delta < 0.0
+}
+
+test "train step updates W" {
+  let step = lmt32.lm_train_step(w.W_U_lm, token_ids, 0.001, 0.0001, 0) in
+  list.get(step.W.data, 0) != list.get(w.W_U_lm.data, 0)
+}

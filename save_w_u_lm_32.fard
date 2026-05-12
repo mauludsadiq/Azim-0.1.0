@@ -1,0 +1,11 @@
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("packages/azim_trial/weights_32") as w
+
+let _ = fs.make_dir("out/weights")
+let _ = fs.write_text("out/weights/W_U_lm_32_init.json", json.canonicalize({
+  dims: w.W_U_lm.dims,
+  data: w.W_U_lm.data
+}))
+{ saved: true, dims: w.W_U_lm.dims, params: list.len(w.W_U_lm.data) }

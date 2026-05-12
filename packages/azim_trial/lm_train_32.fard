@@ -1,0 +1,82 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("tensor") as tensor
+import("block_32") as b32
+import("weights_32") as w
+
+let n_params = list.len(w.W_U_lm.data)
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.dims, 0), list.get(d.dims, 1), d.data)
+}
+
+fn rotating_direction(W, step) {
+  let seed = hash.sha256_text(json.canonicalize({
+    w0: list.get(W.data, 0),
+    w1: list.get(W.data, 1),
+    step: step
+  })) in
+  tensor.matrix(list.get(W.dims, 0), list.get(W.dims, 1),
+    list.build(n_params, fn(i) {
+      let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+      let c = str.slice(h, 7, 8) in
+      if c == "0" || c == "1" || c == "2" || c == "3" ||
+         c == "4" || c == "5" || c == "6" || c == "7"
+      then 1.0 else -1.0
+    })
+  )
+}
+
+fn logsumexp(xs) {
+  let maxv = list.fold(xs, list.get(xs, 0), fn(acc, x) { if x > acc then x else acc }) in
+  let exps = list.map(xs, fn(x) {
+    let d = x - maxv in
+    if d < -20.0 then 0.0 else
+    let e = d * d * d in
+    1.0 + d + d*d/2.0 + e/6.0
+  }) in
+  let total = list.fold(exps, 0.0, fn(acc, x) { acc + x }) in
+  maxv + (if total > 0.0 then total else 0.000001)
+}
+
+fn nll_at_pos(W, token_ids, pos) {
+  let prefix = list.take(token_ids, pos + 1) in
+  let hidden = b32.forward(prefix) in
+  let logits = tensor.matvec(W, hidden) in
+  let target = list.get(token_ids, pos + 1) in
+  let lse = logsumexp(logits.data) in
+  lse - list.get(logits.data, target)
+}
+
+fn lm_train_step(W, token_ids, lr, epsilon, step_index) {
+  let ids = list.take(token_ids, 16) in
+  let n = list.len(ids) in
+  if n < 2 then { loss_before: 0.0, loss_after: 0.0, loss_delta: 0.0, W: W } else
+  let pos = step_index % (n - 1) in
+  let loss_before = nll_at_pos(W, ids, pos) in
+  let d = rotating_direction(W, step_index) in
+  let W_plus = tensor.matrix(list.get(W.dims, 0), list.get(W.dims, 1),
+    list.build(n_params, fn(i) { list.get(W.data, i) + epsilon * list.get(d.data, i) })) in
+  let W_minus = tensor.matrix(list.get(W.dims, 0), list.get(W.dims, 1),
+    list.build(n_params, fn(i) { list.get(W.data, i) - epsilon * list.get(d.data, i) })) in
+  let l_plus  = nll_at_pos(W_plus,  ids, pos) in
+  let l_minus = nll_at_pos(W_minus, ids, pos) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  let updated = list.build(n_params, fn(i) {
+    list.get(W.data, i) - lr * scale * list.get(d.data, i)
+  }) in
+  let W_updated = tensor.matrix(list.get(W.dims, 0), list.get(W.dims, 1), updated) in
+  let loss_after = nll_at_pos(W_updated, ids, pos) in
+  {
+    loss_before: loss_before,
+    loss_after: loss_after,
+    loss_delta: loss_after - loss_before,
+    W: W_updated
+  }
+}
+
+export { load_W, rotating_direction, nll_at_pos, lm_train_step }
