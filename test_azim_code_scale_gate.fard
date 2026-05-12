@@ -1,0 +1,10 @@
+import("packages/azim_code/scale_gate") as gate
+
+gate.build(
+  "out/test_azim_code_train_adapter/result.json",
+  "out/azim_code_retraining_audit/retraining_manifest.json",
+  "out/azim_code_scale_gate",
+  3,
+  13,
+  true
+)

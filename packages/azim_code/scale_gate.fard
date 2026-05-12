@@ -1,0 +1,71 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/json") as json
+import("std/hash") as hash
+
+fn read_json(p) {
+  json.decode(fs.read_text(p))
+}
+
+fn pass_bool(train, audit, min_accepted, min_records, require_loss_decrease) {
+  let loss_ok = if require_loss_decrease then train.avg_loss_after < train.avg_loss_before else true in
+  let accepted_ok = audit.inputs.generation_accepted >= min_accepted in
+  let records_ok = audit.inputs.merged_records >= min_records in
+  loss_ok && accepted_ok && records_ok
+}
+
+fn build(train_result_path, retraining_manifest_path, out_dir, min_accepted, min_records, require_loss_decrease) {
+  let _ = fs.make_dir(out_dir) in
+  let train_outer = read_json(train_result_path) in
+  let train = train_outer.result in
+  let audit = read_json(retraining_manifest_path) in
+  let passed = pass_bool(train, audit, min_accepted, min_records, require_loss_decrease) in
+
+  let report = {
+    component: "azim_code.scale_gate",
+    version: "1.0.0",
+    passed: passed,
+    decision: if passed then "pass" else "fail",
+    train_result_path: train_result_path,
+    train_result_sha256: hash.sha256_text(fs.read_text(train_result_path)),
+    retraining_manifest_path: retraining_manifest_path,
+    retraining_manifest_sha256: hash.sha256_text(fs.read_text(retraining_manifest_path)),
+    thresholds: {
+      min_accepted: min_accepted,
+      min_records: min_records,
+      require_loss_decrease: require_loss_decrease
+    },
+    metrics: {
+      avg_loss_before: train.avg_loss_before,
+      avg_loss_after: train.avg_loss_after,
+      avg_loss_delta: train.avg_loss_delta,
+      accepted_count: audit.inputs.generation_accepted,
+      rejected_count: audit.inputs.generation_rejected,
+      merged_records: audit.inputs.merged_records,
+      verifier_receipt_count: len(audit.verifier_receipts)
+    },
+    checks: {
+      loss_decreased: train.avg_loss_after < train.avg_loss_before,
+      accepted_ok: audit.inputs.generation_accepted >= min_accepted,
+      records_ok: audit.inputs.merged_records >= min_records,
+      receipts_ok: len(audit.verifier_receipts) == audit.inputs.generation_total
+    }
+  } in
+
+  let report_text = json.canonicalize(report) in
+  let report_path = path.join(out_dir, "scale_gate_report.json") in
+  let _w = fs.write_text(report_path, report_text) in
+
+  {
+    ok: true,
+    passed: passed,
+    decision: report.decision,
+    report_path: report_path,
+    report_sha256: hash.sha256_text(report_text),
+    avg_loss_delta: train.avg_loss_delta,
+    accepted_count: audit.inputs.generation_accepted,
+    merged_records: audit.inputs.merged_records
+  }
+}
+
+export { read_json, pass_bool, build }
