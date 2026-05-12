@@ -28,6 +28,6 @@ loop.run({
   steps_per_record: 5,
 
   min_accepted: 3,
-  min_records: 13,
+  min_records: 53,
   require_loss_decrease: true
 })

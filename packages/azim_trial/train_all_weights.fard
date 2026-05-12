@@ -2,19 +2,16 @@ import("std/json") as json
 import("std/hash") as hash
 import("std/list") as list
 import("std/str") as str
-import("tensor") as tensor
 import("std/math") as math
+import("tensor") as tensor
 import("weights_32") as w
 import("block_32") as b32
 
 fn rotating_dir(data, step, seed_int) {
-  let n = list.len(data) in
   let seed = hash.sha256_text(json.canonicalize({
-    w0: list.get(data, 0),
-    step: step,
-    seed: seed_int
+    w0: list.get(data, 0), step: step, seed: seed_int
   })) in
-  list.build(n, fn(i) {
+  list.build(list.len(data), fn(i) {
     let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
     let c = str.slice(h, 7, 8) in
     if c == "0" || c == "1" || c == "2" || c == "3" ||
@@ -30,101 +27,115 @@ fn logsumexp(xs) {
   maxv + math.log(if total > 0.0 then total else 0.000001)
 }
 
-fn nll(W_U, token_ids, pos, WQ, WK, WV, WO, Wg, Wu, Wd, WQ2, WK2, WV2, WO2, Wg2, Wu2, Wd2) {
+fn nll_state(state, token_ids, pos) {
   let prefix = list.take(token_ids, pos + 1) in
   let vectors = list.map(prefix, fn(id) { w.embedding_row(id) }) in
-  let h1 = b32.transformer_block(vectors, WQ, WK, WV, WO, Wg, Wu, Wd) in
+  let h1 = b32.transformer_block(vectors,
+    state.WQ, state.WK, state.WV, state.WO,
+    state.Wg, state.Wu, state.Wd) in
   let h1v = list.concat([vectors, [h1]]) in
-  let h2 = b32.transformer_block(h1v, WQ2, WK2, WV2, WO2, Wg2, Wu2, Wd2) in
+  let h2 = b32.transformer_block(h1v,
+    state.WQ2, state.WK2, state.WV2, state.WO2,
+    state.Wg2, state.Wu2, state.Wd2) in
   let hidden = tensor.rms_norm(h2, 0.000001) in
-  let logits = tensor.matvec(W_U, hidden) in
+  let logits = tensor.matvec(state.W_U, hidden) in
   let target = list.get(token_ids, pos + 1) in
   logsumexp(logits.data) - list.get(logits.data, target)
 }
 
-fn perturb(data, dir, epsilon) {
-  let n = list.len(data) in
-  list.build(n, fn(i) { list.get(data, i) + epsilon * list.get(dir, i) })
+fn spsa_update(data, dir, l_plus, l_minus, lr, epsilon) {
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  list.build(list.len(data), fn(i) {
+    list.get(data, i) - lr * scale * list.get(dir, i)
+  })
 }
 
-fn spsa_block(W, data, dir, epsilon, token_ids, pos,
-              WQ, WK, WV, WO, Wg, Wu, Wd,
-              WQ2, WK2, WV2, WO2, Wg2, Wu2, Wd2,
-              make_W) {
-  let rows = list.get(W.dims, 0) in
-  let cols = list.get(W.dims, 1) in
+fn with_W_U(state, d) {
+  { W_U: tensor.matrix(list.get(state.W_U.dims,0), list.get(state.W_U.dims,1), d),
+    WQ: state.WQ, WK: state.WK, WV: state.WV, WO: state.WO,
+    Wg: state.Wg, Wu: state.Wu, Wd: state.Wd,
+    WQ2: state.WQ2, WK2: state.WK2, WV2: state.WV2, WO2: state.WO2,
+    Wg2: state.Wg2, Wu2: state.Wu2, Wd2: state.Wd2 }
+}
+
+fn with_WQ(state, d) {
+  { W_U: state.W_U,
+    WQ: tensor.matrix(list.get(state.WQ.dims,0), list.get(state.WQ.dims,1), d),
+    WK: state.WK, WV: state.WV, WO: state.WO,
+    Wg: state.Wg, Wu: state.Wu, Wd: state.Wd,
+    WQ2: state.WQ2, WK2: state.WK2, WV2: state.WV2, WO2: state.WO2,
+    Wg2: state.Wg2, Wu2: state.Wu2, Wd2: state.Wd2 }
+}
+
+fn with_WK(state, d) {
+  { W_U: state.W_U, WQ: state.WQ,
+    WK: tensor.matrix(list.get(state.WK.dims,0), list.get(state.WK.dims,1), d),
+    WV: state.WV, WO: state.WO,
+    Wg: state.Wg, Wu: state.Wu, Wd: state.Wd,
+    WQ2: state.WQ2, WK2: state.WK2, WV2: state.WV2, WO2: state.WO2,
+    Wg2: state.Wg2, Wu2: state.Wu2, Wd2: state.Wd2 }
+}
+
+fn with_WV(state, d) {
+  { W_U: state.W_U, WQ: state.WQ, WK: state.WK,
+    WV: tensor.matrix(list.get(state.WV.dims,0), list.get(state.WV.dims,1), d),
+    WO: state.WO, Wg: state.Wg, Wu: state.Wu, Wd: state.Wd,
+    WQ2: state.WQ2, WK2: state.WK2, WV2: state.WV2, WO2: state.WO2,
+    Wg2: state.Wg2, Wu2: state.Wu2, Wd2: state.Wd2 }
+}
+
+fn with_WO(state, d) {
+  { W_U: state.W_U, WQ: state.WQ, WK: state.WK, WV: state.WV,
+    WO: tensor.matrix(list.get(state.WO.dims,0), list.get(state.WO.dims,1), d),
+    Wg: state.Wg, Wu: state.Wu, Wd: state.Wd,
+    WQ2: state.WQ2, WK2: state.WK2, WV2: state.WV2, WO2: state.WO2,
+    Wg2: state.Wg2, Wu2: state.Wu2, Wd2: state.Wd2 }
+}
+
+fn step_block(state, data, dims, dir, epsilon, lr, ids, pos, with_fn) {
   let n = list.len(data) in
-  let d_plus  = perturb(data, dir, epsilon) in
-  let d_minus = perturb(data, dir, 0.0 - epsilon) in
-  let W_plus  = make_W(d_plus) in
-  let W_minus = make_W(d_minus) in
-  let l_plus  = nll(W_plus,  token_ids, pos, WQ, WK, WV, WO, Wg, Wu, Wd, WQ2, WK2, WV2, WO2, Wg2, Wu2, Wd2) in
-  let l_minus = nll(W_minus, token_ids, pos, WQ, WK, WV, WO, Wg, Wu, Wd, WQ2, WK2, WV2, WO2, Wg2, Wu2, Wd2) in
-  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
-  list.build(n, fn(i) { list.get(data, i) - scale * list.get(dir, i) })
+  let d_plus  = list.build(n, fn(i) { list.get(data, i) + epsilon * list.get(dir, i) }) in
+  let d_minus = list.build(n, fn(i) { list.get(data, i) - epsilon * list.get(dir, i) }) in
+  let l_plus  = nll_state(with_fn(d_plus),  ids, pos) in
+  let l_minus = nll_state(with_fn(d_minus), ids, pos) in
+  let new_data = spsa_update(data, dir, l_plus, l_minus, lr, epsilon) in
+  with_fn(new_data)
 }
 
 fn train_step(state, token_ids, lr, epsilon, step) {
   let ids = list.take(token_ids, 12) in
   let n = list.len(ids) in
   if n < 2 then state else
-  let pos = step % (n - 1) in
-
-  let loss_before = nll(state.W_U, ids, pos,
-    state.WQ, state.WK, state.WV, state.WO,
-    state.Wg, state.Wu, state.Wd,
-    state.WQ2, state.WK2, state.WV2, state.WO2,
-    state.Wg2, state.Wu2, state.Wd2) in
-
-  let d_U  = rotating_dir(state.W_U.data,  step, 1) in
-  let d_Q  = rotating_dir(state.WQ.data,   step, 2) in
-  let d_K  = rotating_dir(state.WK.data,   step, 3) in
-  let d_V  = rotating_dir(state.WV.data,   step, 4) in
-  let d_O  = rotating_dir(state.WO.data,   step, 5) in
-  let d_Q2 = rotating_dir(state.WQ2.data,  step, 6) in
-  let d_K2 = rotating_dir(state.WK2.data,  step, 7) in
-  let d_V2 = rotating_dir(state.WV2.data,  step, 8) in
-  let d_O2 = rotating_dir(state.WO2.data,  step, 9) in
-
-  let new_U  = spsa_block(state.W_U,  state.W_U.data,  d_U,  epsilon, ids, pos,
-    state.WQ, state.WK, state.WV, state.WO, state.Wg, state.Wu, state.Wd,
-    state.WQ2, state.WK2, state.WV2, state.WO2, state.Wg2, state.Wu2, state.Wd2,
-    fn(d) { tensor.matrix(list.get(state.W_U.dims, 0), list.get(state.W_U.dims, 1), d) }) in
-
-  let new_WQ = spsa_block(state.WQ, state.WQ.data, d_Q, epsilon, ids, pos,
-    tensor.matrix(list.get(state.WQ.dims,0), list.get(state.WQ.dims,1), new_U),
-    state.WK, state.WV, state.WO, state.Wg, state.Wu, state.Wd,
-    state.WQ2, state.WK2, state.WV2, state.WO2, state.Wg2, state.Wu2, state.Wd2,
-    fn(d) { tensor.matrix(list.get(state.WQ.dims,0), list.get(state.WQ.dims,1), d) }) in
-
-  {
-    W_U:  tensor.matrix(list.get(state.W_U.dims,0),  list.get(state.W_U.dims,1),  new_U),
-    WQ:   tensor.matrix(list.get(state.WQ.dims,0),   list.get(state.WQ.dims,1),   new_WQ),
-    WK:   state.WK,
-    WV:   state.WV,
-    WO:   state.WO,
-    Wg:   state.Wg,
-    Wu:   state.Wu,
-    Wd:   state.Wd,
-    WQ2:  state.WQ2,
-    WK2:  state.WK2,
-    WV2:  state.WV2,
-    WO2:  state.WO2,
-    Wg2:  state.Wg2,
-    Wu2:  state.Wu2,
-    Wd2:  state.Wd2,
-    loss: loss_before,
-    step: step
-  }
+  let pos = 1 + (step % (n - 2)) in
+  let loss_before = nll_state(state, ids, pos) in
+  let s1 = step_block(state, state.W_U.data, state.W_U.dims,
+    rotating_dir(state.W_U.data, step, 1), epsilon, lr, ids, pos,
+    fn(d) { with_W_U(state, d) }) in
+  let s2 = step_block(s1, s1.WQ.data, s1.WQ.dims,
+    rotating_dir(s1.WQ.data, step, 2), epsilon, lr, ids, pos,
+    fn(d) { with_WQ(s1, d) }) in
+  let s3 = step_block(s2, s2.WK.data, s2.WK.dims,
+    rotating_dir(s2.WK.data, step, 3), epsilon, lr, ids, pos,
+    fn(d) { with_WK(s2, d) }) in
+  let s4 = step_block(s3, s3.WV.data, s3.WV.dims,
+    rotating_dir(s3.WV.data, step, 4), epsilon, lr, ids, pos,
+    fn(d) { with_WV(s3, d) }) in
+  let s5 = step_block(s4, s4.WO.data, s4.WO.dims,
+    rotating_dir(s4.WO.data, step, 5), epsilon, lr, ids, pos,
+    fn(d) { with_WO(s4, d) }) in
+  { W_U: s5.W_U, WQ: s5.WQ, WK: s5.WK, WV: s5.WV, WO: s5.WO,
+    Wg: s5.Wg, Wu: s5.Wu, Wd: s5.Wd,
+    WQ2: s5.WQ2, WK2: s5.WK2, WV2: s5.WV2, WO2: s5.WO2,
+    Wg2: s5.Wg2, Wu2: s5.Wu2, Wd2: s5.Wd2,
+    loss: loss_before, step: step }
 }
 
 let init_state = {
-  W_U:  w.W_U_lm,
-  WQ:   w.W_Q,   WK: w.W_K,   WV: w.W_V,   WO: w.W_O,
-  Wg:   w.W_gate, Wu: w.W_up,  Wd: w.W_down,
-  WQ2:  w.W_Q2,  WK2: w.W_K2, WV2: w.W_V2, WO2: w.W_O2,
-  Wg2:  w.W_gate2, Wu2: w.W_up2, Wd2: w.W_down2,
-  loss: 0.0, step: 0
+  W_U: w.W_U_lm,
+  WQ: w.W_Q, WK: w.W_K, WV: w.W_V, WO: w.W_O,
+  Wg: w.W_gate, Wu: w.W_up, Wd: w.W_down,
+  WQ2: w.W_Q2, WK2: w.W_K2, WV2: w.W_V2, WO2: w.W_O2,
+  Wg2: w.W_gate2, Wu2: w.W_up2, Wd2: w.W_down2
 }
 
-export { rotating_dir, logsumexp, nll, train_step, init_state }
+export { rotating_dir, logsumexp, nll_state, train_step, init_state }

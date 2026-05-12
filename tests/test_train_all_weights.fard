@@ -3,26 +3,41 @@ import("std/type") as type
 import("../packages/azim_trial/train_all_weights") as tw
 
 let token_ids = [2, 10, 50, 100, 200, 400, 3]
+let s = tw.init_state
 
-test "nll returns float" {
-  let s = tw.init_state in
-  type.of(tw.nll(s.W_U, token_ids, 0,
-    s.WQ, s.WK, s.WV, s.WO, s.Wg, s.Wu, s.Wd,
-    s.WQ2, s.WK2, s.WV2, s.WO2, s.Wg2, s.Wu2, s.Wd2)) == "float"
+test "nll_state returns float" {
+  type.of(tw.nll_state(s, token_ids, 0)) == "float"
+}
+
+test "nll_state is positive" {
+  tw.nll_state(s, token_ids, 0) > 0.0
 }
 
 test "train step returns record" {
-  type.of(tw.train_step(tw.init_state, token_ids, 0.001, 0.0001, 0)) == "record"
+  type.of(tw.train_step(s, token_ids, 0.001, 0.0001, 0)) == "record"
 }
 
 test "W_U changes after step" {
-  let s = tw.init_state in
   let s2 = tw.train_step(s, token_ids, 0.001, 0.0001, 0) in
   list.get(s2.W_U.data, 0) != list.get(s.W_U.data, 0)
 }
 
 test "WQ changes after step" {
-  let s = tw.init_state in
   let s2 = tw.train_step(s, token_ids, 0.001, 0.0001, 0) in
   list.get(s2.WQ.data, 0) != list.get(s.WQ.data, 0)
+}
+
+test "WK changes after step" {
+  let s2 = tw.train_step(s, token_ids, 0.001, 0.0001, 0) in
+  list.get(s2.WK.data, 0) != list.get(s.WK.data, 0)
+}
+
+test "WV changes after step" {
+  let s2 = tw.train_step(s, token_ids, 0.001, 0.0001, 0) in
+  list.get(s2.WV.data, 0) != list.get(s.WV.data, 0)
+}
+
+test "WO changes after step" {
+  let s2 = tw.train_step(s, token_ids, 0.001, 0.0001, 0) in
+  list.get(s2.WO.data, 0) != list.get(s.WO.data, 0)
 }

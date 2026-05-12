@@ -1,0 +1,22 @@
+import("std/list") as list
+import("../packages/azim_trial/train_all_weights") as tw
+import("../packages/azim_trial/tensor") as tensor
+
+let s = tw.init_state
+let ids = [2, 10, 50, 100, 200, 400, 3]
+let pos = 3
+let epsilon = 0.001
+let dir = tw.rotating_dir(s.WQ.data, 0, 2)
+let n = list.len(s.WQ.data)
+
+let d_plus  = list.build(n, fn(i) { list.get(s.WQ.data, i) + epsilon * list.get(dir, i) })
+let d_minus = list.build(n, fn(i) { list.get(s.WQ.data, i) - epsilon * list.get(dir, i) })
+
+let s_plus  = { W_U: s.W_U, WQ: tensor.matrix(32,32,d_plus), WK: s.WK, WV: s.WV, WO: s.WO, Wg: s.Wg, Wu: s.Wu, Wd: s.Wd, WQ2: s.WQ2, WK2: s.WK2, WV2: s.WV2, WO2: s.WO2, Wg2: s.Wg2, Wu2: s.Wu2, Wd2: s.Wd2 }
+let s_minus = { W_U: s.W_U, WQ: tensor.matrix(32,32,d_minus), WK: s.WK, WV: s.WV, WO: s.WO, Wg: s.Wg, Wu: s.Wu, Wd: s.Wd, WQ2: s.WQ2, WK2: s.WK2, WV2: s.WV2, WO2: s.WO2, Wg2: s.Wg2, Wu2: s.Wu2, Wd2: s.Wd2 }
+
+let l_plus  = tw.nll_state(s_plus,  ids, pos)
+let l_minus = tw.nll_state(s_minus, ids, pos)
+let l_base  = tw.nll_state(s, ids, pos)
+
+{ l_base: l_base, l_plus: l_plus, l_minus: l_minus, diff: l_plus - l_minus }
