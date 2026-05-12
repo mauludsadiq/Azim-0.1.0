@@ -1,0 +1,15 @@
+import("std/list") as list
+import("packages/azim_trial/weights_32") as w
+
+{
+  W_E_per_token: list.len(w.embedding_row(0).data),
+  W_Q_params: list.len(w.W_Q.data),
+  W_K_params: list.len(w.W_K.data),
+  W_V_params: list.len(w.W_V.data),
+  W_O_params: list.len(w.W_O.data),
+  W_gate_params: list.len(w.W_gate.data),
+  W_up_params: list.len(w.W_up.data),
+  W_down_params: list.len(w.W_down.data),
+  W_Q2_params: list.len(w.W_Q2.data),
+  W_U_lm_params: list.len(w.W_U_lm.data)
+}
