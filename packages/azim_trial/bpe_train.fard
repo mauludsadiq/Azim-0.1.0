@@ -1,0 +1,117 @@
+import("std/str") as str
+import("std/list") as list
+import("std/rec") as rec
+import("std/hash") as hash
+import("std/json") as json
+import("std/fs") as fs
+
+fn chars_of(text) {
+  str.chars(text)
+}
+
+fn words_of(text) {
+  list.filter(str.split(text, " "), fn(w) { str.len(w) > 0 })
+}
+
+fn word_to_char_list(word) {
+  let cs = str.chars(word) in
+  list.append(cs, "</w>")
+}
+
+fn count_pairs(vocab) {
+  list.fold(rec.keys(vocab), rec.empty(), fn(acc, word) {
+    let count = rec.getOr(vocab, word, 0) in
+    let chars = str.split(word, " ") in
+    let n = list.len(chars) in
+    if n < 2 then acc else
+    list.fold(list.range(0, n - 1), acc, fn(a, i) {
+      let pair = str.concat([list.get(chars, i), " ", list.get(chars, i + 1)]) in
+      rec.set(a, pair, rec.getOr(a, pair, 0) + count)
+    })
+  })
+}
+
+fn best_pair(pairs) {
+  let keys = rec.keys(pairs) in
+  if list.len(keys) == 0 then "" else
+  list.fold(keys, list.get(keys, 0), fn(best, k) {
+    if rec.getOr(pairs, k, 0) > rec.getOr(pairs, best, 0) then k else best
+  })
+}
+
+fn merge_pair(vocab, pair) {
+  let merged = str.replace(pair, " ", "") in
+  let escaped = pair in
+  list.fold(rec.keys(vocab), rec.empty(), fn(acc, word) {
+    let count = rec.getOr(vocab, word, 0) in
+    let new_word = str.replace(str.concat([" ", word, " "]),
+                               str.concat([" ", escaped, " "]),
+                               str.concat([" ", merged, " "])) in
+    let trimmed = str.trim(new_word) in
+    rec.set(acc, trimmed, rec.getOr(acc, trimmed, 0) + count)
+  })
+}
+
+fn build_initial_vocab(texts) {
+  list.fold(texts, rec.empty(), fn(acc, text) {
+    let words = words_of(text) in
+    list.fold(words, acc, fn(a, word) {
+      let key = str.join(str.chars(word), " ") in
+      rec.set(a, key, rec.getOr(a, key, 0) + 1)
+    })
+  })
+}
+
+fn train(texts, num_merges) {
+  let vocab = build_initial_vocab(texts) in
+  let init = { vocab: vocab, merges: [], step: 0 } in
+  let result = list.fold(list.range(0, num_merges), init, fn(acc, _) {
+    let pairs = count_pairs(acc.vocab) in
+    let best = best_pair(pairs) in
+    if str.len(best) == 0 then acc else
+    let new_vocab = merge_pair(acc.vocab, best) in
+    {
+      vocab: new_vocab,
+      merges: list.append(acc.merges, best),
+      step: acc.step + 1
+    }
+  }) in
+  result
+}
+
+fn collect_tokens(merges) {
+  let base_chars = list.map(list.range(32, 127), fn(i) {
+    str.concat([str.from(i)])
+  }) in
+  let specials = ["<PAD>", "<UNK>", "<BOS>", "<EOS>", "</w>"] in
+  let merged = list.map(merges, fn(m) { str.replace(m, " ", "") }) in
+  let all = list.concat([specials, base_chars, merged]) in
+  list.fold(all, [], fn(acc, t) {
+    if list.any(acc, fn(x) { x == t }) then acc
+    else list.append(acc, t)
+  })
+}
+
+fn save_manifest(merges, out_path, source_sha256) {
+  let tokens = collect_tokens(merges) in
+  let manifest = {
+    component: "azim_trial.bpe_train",
+    version: "1.0.0",
+    source_sha256: source_sha256,
+    num_merges: list.len(merges),
+    vocab_size: list.len(tokens),
+    merges: merges,
+    vocabulary: tokens
+  } in
+  let text = json.canonicalize(manifest) in
+  let _ = fs.write_text(out_path, text) in
+  {
+    ok: true,
+    vocab_size: list.len(tokens),
+    num_merges: list.len(merges),
+    manifest_path: out_path,
+    manifest_sha256: hash.sha256_text(text)
+  }
+}
+
+export { chars_of, words_of, word_to_char_list, count_pairs, best_pair, merge_pair, build_initial_vocab, train, collect_tokens, save_manifest }

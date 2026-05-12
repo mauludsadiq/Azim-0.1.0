@@ -1,0 +1,36 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/bpe_train") as bpe
+
+test "build initial vocab returns record" {
+  let v = bpe.build_initial_vocab(["hello world", "hello there"]) in
+  type.of(v) == "record"
+}
+
+test "count pairs returns record" {
+  let v = bpe.build_initial_vocab(["ab ab ab"]) in
+  let p = bpe.count_pairs(v) in
+  type.of(p) == "record"
+}
+
+test "best pair returns text" {
+  let v = bpe.build_initial_vocab(["ab ab ab"]) in
+  let p = bpe.count_pairs(v) in
+  type.of(bpe.best_pair(p)) == "text"
+}
+
+test "train returns merges" {
+  let result = bpe.train(["hello world hello world hello"], 5) in
+  result.step == 5
+}
+
+test "train merges reduce unique tokens" {
+  let result = bpe.train(["hello world hello world hello"], 3) in
+  list.len(result.merges) == 3
+}
+
+test "collect tokens includes specials" {
+  let result = bpe.train(["hello"], 2) in
+  let tokens = bpe.collect_tokens(result.merges) in
+  list.any(tokens, fn(t) { t == "<BOS>" })
+}

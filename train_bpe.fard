@@ -1,0 +1,13 @@
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("std/hash") as hash
+import("packages/azim_trial/owt_loader") as loader
+import("packages/azim_trial/bpe_train") as bpe
+
+let texts = loader.extract_shard_texts("/tmp/owt_0.parquet", 10, 200)
+let clean = list.filter(texts, fn(t) { str.len(t) > 20 })
+let source_sha = hash.sha256_text(str.join(clean, "\n"))
+let _ = fs.make_dir("out/bpe")
+let result = bpe.train(clean, 500)
+bpe.save_manifest(result.merges, "out/bpe/bpe_500.json", source_sha)
