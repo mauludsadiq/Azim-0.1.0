@@ -1,0 +1,38 @@
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("std/str") as str
+import("packages/azim_trial/tokenizer") as tok
+import("packages/azim_trial/tensor") as tensor
+import("packages/azim_trial/lm_head") as lm
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+fn predict_next_W(W, token_ids) {
+  let logits = tensor.matvec(W, lm.hidden_for_tokens(token_ids)) in
+  tensor.argmax(logits.data)
+}
+
+fn generate_W(W, prompt, max_tokens) {
+  let prompt_ids = tok.tokenize(prompt) in
+  let init = { ids: prompt_ids, generated: [], steps: 0 } in
+  let result = list.fold(list.range(0, max_tokens), init, fn(acc, _) {
+    let next_id = predict_next_W(W, acc.ids) in
+    if next_id == tok.eos_id then acc else
+    { ids: list.append(acc.ids, next_id), generated: list.append(acc.generated, next_id), steps: acc.steps + 1 }
+  }) in
+  tok.detokenize(result.generated)
+}
+
+let W_shard0  = load_W("out/lm_checkpoints2/shard_0.json")
+let W_shard79 = load_W("out/lm_checkpoints2/shard_79.json")
+
+let prompts = ["The cat sat", "In the beginning", "Scientists discovered"]
+
+{
+  shard_0:  list.map(prompts, fn(p) { { prompt: p, completion: generate_W(W_shard0,  p, 10) } }),
+  shard_79: list.map(prompts, fn(p) { { prompt: p, completion: generate_W(W_shard79, p, 10) } })
+}

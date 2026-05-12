@@ -1,0 +1,33 @@
+import("packages/azim_code/loop_run") as loop
+
+loop.run({
+  out_root: "out/azim_code_loop",
+  corpus_root: "packages/azim_trial",
+  corpus_out: "out/azim_code_loop/corpus",
+  max_corpus_files: 10,
+
+  prompts: [
+    "return value",
+    "write add function",
+    "write main function"
+  ],
+
+  candidate_dir: "out/azim_code_loop/candidates",
+  run_dir: "out/azim_code_loop/runs",
+  accepted_out: "out/azim_code_loop/accepted",
+  merged_out: "out/azim_code_loop/merged",
+  audit_out: "out/azim_code_loop/audit",
+  train_out: "out/azim_code_loop/train",
+  gate_out: "out/azim_code_loop/gate",
+
+  corpus_manifest_path: "out/azim_code_loop/corpus/manifest.json",
+
+  lr: 0.001,
+  epsilon: 10.0,
+  max_train_records: 13,
+  steps_per_record: 1,
+
+  min_accepted: 3,
+  min_records: 13,
+  require_loss_decrease: true
+})

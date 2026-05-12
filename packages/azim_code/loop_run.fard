@@ -1,0 +1,92 @@
+import("std/fs") as fs
+import("std/json") as json
+import("std/hash") as hash
+import("std/str") as str
+import("corpus_packer") as corpus
+import("generation_wrapper") as gen
+import("accepted_dataset") as accepted
+import("training_corpus_merge") as merge
+import("retraining_manifest") as audit
+import("code_train_adapter") as train
+import("scale_gate") as gate
+
+fn run(config) {
+  let _ = fs.make_dir(config.out_root) in
+
+  let corpus_result = corpus.pack(config.corpus_root, config.corpus_out, config.max_corpus_files) in
+
+  let generation_result = gen.generate_batch(
+    config.prompts,
+    config.candidate_dir,
+    config.run_dir
+  ) in
+
+  let accepted_result = accepted.build(
+    generation_result.manifest_path,
+    config.accepted_out
+  ) in
+
+  let merge_result = merge.merge(
+    corpus_result.manifest.shard_path,
+    accepted_result.shard_path,
+    config.merged_out
+  ) in
+
+  let audit_result = audit.build(
+    config.corpus_manifest_path,
+    accepted_result.manifest_path,
+    merge_result.manifest_path,
+    generation_result.manifest_path,
+    config.audit_out
+  ) in
+
+  let train_result = train.train_shard(
+    merge_result.out_shard_path,
+    config.train_out,
+    config.lr,
+    config.epsilon,
+    config.max_train_records,
+    config.steps_per_record
+  ) in
+
+  let train_result_path = str.concat([config.train_out, "/loop_train_result.json"]) in
+  let train_result_text = json.canonicalize({ result: train_result }) in
+  let _tw = fs.write_text(train_result_path, train_result_text) in
+  let gate_result = gate.build(
+    train_result_path,
+    audit_result.audit_path,
+    config.gate_out,
+    config.min_accepted,
+    config.min_records,
+    config.require_loss_decrease
+  ) in
+
+  let report = {
+    component: "azim_code.loop_run",
+    version: "1.0.0",
+    corpus: corpus_result,
+    generation: generation_result,
+    accepted: accepted_result,
+    merged: merge_result,
+    audit: audit_result,
+    train: train_result,
+    gate: gate_result
+  } in
+
+  let report_text = json.canonicalize(report) in
+  let report_path = str.concat([config.out_root, "/loop_report.json"]) in
+  let _w = fs.write_text(report_path, report_text) in
+
+  {
+    ok: true,
+    report_path: report_path,
+    report_sha256: hash.sha256_text(report_text),
+    gate_passed: gate_result.passed,
+    accepted_count: generation_result.accepted_count,
+    merged_records: merge_result.merged_records,
+    total_steps: train_result.total_steps,
+    avg_loss_delta: train_result.avg_loss_delta
+  }
+}
+
+export { run }
