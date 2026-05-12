@@ -1,0 +1,102 @@
+import("std/str") as str
+import("std/list") as list
+import("std/rec") as rec
+import("std/hash") as hash
+import("std/json") as json
+import("std/fs") as fs
+
+fn load_manifest(path) {
+  json.decode(fs.read_text(path))
+}
+
+fn build_vocab_map(vocabulary) {
+  list.fold(list.range(0, list.len(vocabulary)), rec.empty(), fn(acc, i) {
+    rec.set(acc, list.get(vocabulary, i), i)
+  })
+}
+
+fn build_merge_map(merges) {
+  list.fold(list.range(0, list.len(merges)), rec.empty(), fn(acc, i) {
+    let pair = list.get(merges, i) in
+    rec.set(acc, pair, i)
+  })
+}
+
+fn word_to_symbols(word) {
+  list.append(str.chars(word), "</w>")
+}
+
+fn find_best_merge(symbols, merge_map) {
+  let n = list.len(symbols) in
+  if n < 2 then { pair: "", rank: -1, pos: -1 } else
+  list.fold(list.range(0, n - 1), { pair: "", rank: -1, pos: -1 }, fn(acc, i) {
+    let pair = str.concat([list.get(symbols, i), " ", list.get(symbols, i + 1)]) in
+    let rank = rec.getOr(merge_map, pair, -1) in
+    if rank >= 0 && (acc.rank < 0 || rank < acc.rank) then
+      { pair: pair, rank: rank, pos: i }
+    else acc
+  })
+}
+
+fn apply_merge(symbols, pos, merged) {
+  let before = list.take(symbols, pos) in
+  let after = list.drop(symbols, pos + 2) in
+  list.concat([before, [merged], after])
+}
+
+fn encode_word(word, merge_map) {
+  let init = word_to_symbols(word) in
+  let result = while { syms: init, done: false }
+    fn(s) { list.len(s.syms) > 1 && !s.done }
+    fn(s) {
+      let best = find_best_merge(s.syms, merge_map) in
+      if best.rank < 0 then { syms: s.syms, done: true }
+      else
+        let merged = str.replace(best.pair, " ", "") in
+        { syms: apply_merge(s.syms, best.pos, merged), done: false }
+    } in
+  result.value.syms
+}
+
+fn encode_text(text, merge_map, vocab_map, unk_id, bos_id, eos_id) {
+  let words = list.filter(str.split(text, " "), fn(w) { str.len(w) > 0 }) in
+  let token_lists = list.map(words, fn(word) {
+    let syms = encode_word(word, merge_map) in
+    list.map(syms, fn(s) { rec.getOr(vocab_map, s, unk_id) })
+  }) in
+  let flat = list.fold(token_lists, [], fn(acc, ts) { list.concat([acc, ts]) }) in
+  list.concat([[bos_id], flat, [eos_id]])
+}
+
+fn tokenize_with_manifest(text, manifest) {
+  let merge_map = build_merge_map(manifest.merges) in
+  let vocab_map = build_vocab_map(manifest.vocabulary) in
+  let unk_id = rec.getOr(vocab_map, "<UNK>", 1) in
+  let bos_id = rec.getOr(vocab_map, "<BOS>", 2) in
+  let eos_id = rec.getOr(vocab_map, "<EOS>", 3) in
+  let ids = encode_text(text, merge_map, vocab_map, unk_id, bos_id, eos_id) in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.bpe_encode",
+    version: "1.0.0",
+    manifest_sha256: manifest_sha256,
+    input_sha256: hash.sha256_text(text),
+    token_ids: ids
+  })) in
+  { tokens: ids, receipt: receipt }
+}
+
+fn detokenize(ids, vocabulary) {
+  let tokens = list.map(ids, fn(i) {
+    if i < 0 || i >= list.len(vocabulary) then "<UNK>"
+    else list.get(vocabulary, i)
+  }) in
+  let filtered = list.filter(tokens, fn(t) {
+    t != "<BOS>" && t != "<EOS>" && t != "<PAD>"
+  }) in
+  let rejoined = list.map(filtered, fn(t) {
+    str.replace(t, "</w>", " ")
+  }) in
+  str.trim(str.concat(rejoined))
+}
+
+export { load_manifest, build_vocab_map, build_merge_map, word_to_symbols, find_best_merge, apply_merge, encode_word, encode_text, tokenize_with_manifest, detokenize }

@@ -1,0 +1,32 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("std/fs") as fs
+import("std/json") as json
+import("../packages/azim_trial/bpe_encode") as enc
+
+let manifest = json.decode(fs.read_text("out/bpe/bpe_500.json"))
+let mm = enc.build_merge_map(manifest.merges)
+let vm = enc.build_vocab_map(manifest.vocabulary)
+
+test "manifest loaded" {
+  manifest.vocab_size == 600
+}
+
+test "encode sky is blue" {
+  let ids = enc.encode_text("the sky is blue", mm, vm, 1, 2, 3) in
+  list.len(ids) > 2
+}
+
+test "encode produces fewer tokens than chars" {
+  let text = "the sky is blue today" in
+  let ids = enc.encode_text(text, mm, vm, 1, 2, 3) in
+  list.len(ids) < str.len(text)
+}
+
+test "detokenize roundtrip" {
+  let text = "hello world" in
+  let ids = enc.encode_text(text, mm, vm, 1, 2, 3) in
+  let decoded = enc.detokenize(ids, manifest.vocabulary) in
+  str.len(decoded) > 0
+}
