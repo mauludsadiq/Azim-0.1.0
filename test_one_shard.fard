@@ -1,0 +1,2 @@
+import("packages/azim_trial/lm_owt_train") as run
+run.train_shard(0, run.train_shard(0, { data: [], dims: [129,8] }, 0.001, 1, 1).W_U_lm, 0.001, 1, 1)

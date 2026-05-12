@@ -1,0 +1,67 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+import("tokenizer") as tok
+import("lm_head") as lm
+
+let n_params = list.len(lm.W_U_lm.data)
+
+fn rotating_direction(W_U_lm, step) {
+  let seed = hash.sha256_text(json.canonicalize({
+    w0: list.get(W_U_lm.data, 0),
+    w1: list.get(W_U_lm.data, 1),
+    step: step
+  })) in
+  tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
+    list.build(n_params, fn(i) {
+      let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+      let c = str.slice(h, 7, 8) in
+      if c == "0" || c == "1" || c == "2" || c == "3" ||
+         c == "4" || c == "5" || c == "6" || c == "7"
+      then 1.0 else -1.0
+    })
+  )
+}
+
+# Cached version: hidden_state is precomputed
+fn nll_at_pos_cached(W_U_lm, hidden_state, target_token_id) {
+  let logits = tensor.matvec(W_U_lm, hidden_state) in
+  lm.nll_token(logits, target_token_id)
+}
+
+fn lm_train_step_cached(W_U_lm, hidden_state, target_token_id, lr, epsilon) {
+  let loss_before = nll_at_pos_cached(W_U_lm, hidden_state, target_token_id) in
+  let d = rotating_direction(W_U_lm, loss_before) in
+  let W_plus = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
+    list.build(n_params, fn(i) {
+      list.get(W_U_lm.data, i) + epsilon * list.get(d.data, i)
+    })) in
+  let W_minus = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1),
+    list.build(n_params, fn(i) {
+      list.get(W_U_lm.data, i) - epsilon * list.get(d.data, i)
+    })) in
+  let l_plus  = nll_at_pos_cached(W_plus,  hidden_state, target_token_id) in
+  let l_minus = nll_at_pos_cached(W_minus, hidden_state, target_token_id) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  let flat_W = tensor.vector(W_U_lm.data) in
+  let grad_flat = tensor.vector(list.build(n_params, fn(i) {
+    scale * list.get(d.data, i)
+  })) in
+  let updated_flat = tensor.sub(flat_W, tensor.scale(grad_flat, lr)) in
+  let W_updated = tensor.matrix(list.get(W_U_lm.dims, 0), list.get(W_U_lm.dims, 1), updated_flat.data) in
+  let loss_after = nll_at_pos_cached(W_updated, hidden_state, target_token_id) in
+  {
+    loss_before: loss_before,
+    loss_after: loss_after,
+    loss_delta: loss_after - loss_before,
+    W_U_lm: W_updated
+  }
+}
+
+export {
+  rotating_direction,
+  nll_at_pos_cached,
+  lm_train_step_cached
+}

@@ -1,0 +1,2 @@
+import("packages/azim_trial/lm_owt_train") as run
+run.full_lm_run(2, 0.0005, 0.0001, 2, 3)
