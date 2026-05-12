@@ -4,7 +4,7 @@ loop.run({
   out_root: "out/azim_code_loop",
   corpus_root: "packages/azim_trial",
   corpus_out: "out/azim_code_loop/corpus",
-  max_corpus_files: 25,
+  max_corpus_files: 50,
 
   prompts: [
     "return value",
