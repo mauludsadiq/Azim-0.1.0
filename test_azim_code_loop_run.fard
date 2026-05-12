@@ -4,7 +4,7 @@ loop.run({
   out_root: "out/azim_code_loop",
   corpus_root: "packages/azim_trial",
   corpus_out: "out/azim_code_loop/corpus",
-  max_corpus_files: 10,
+  max_corpus_files: 25,
 
   prompts: [
     "return value",
@@ -24,8 +24,8 @@ loop.run({
 
   lr: 0.001,
   epsilon: 10.0,
-  max_train_records: 13,
-  steps_per_record: 1,
+  max_train_records: 28,
+  steps_per_record: 5,
 
   min_accepted: 3,
   min_records: 13,
