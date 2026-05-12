@@ -1,0 +1,30 @@
+import("std/list") as list
+import("../packages/azim_trial/weights_32") as w
+
+test "d_model is 32" {
+  w.model_config.d_model == 32
+}
+
+test "n_layers is 2" {
+  w.model_config.n_layers == 2
+}
+
+test "vocab_size is 600" {
+  w.model_config.vocab_size == 600
+}
+
+test "W_Q shape 32x32" {
+  list.get(w.W_Q.dims, 0) == 32 && list.get(w.W_Q.dims, 1) == 32
+}
+
+test "W_U_lm shape 600x32" {
+  list.get(w.W_U_lm.dims, 0) == 600 && list.get(w.W_U_lm.dims, 1) == 32
+}
+
+test "embedding row length 32" {
+  list.len(w.embedding_row(0).data) == 32
+}
+
+test "layer 2 weights distinct from layer 1" {
+  list.get(w.W_Q.data, 0) != list.get(w.W_Q2.data, 0)
+}

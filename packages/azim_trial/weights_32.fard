@@ -1,0 +1,61 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/math") as math
+import("tensor") as tensor
+
+let model_config = {
+  name: "azim-trial-32-deterministic-decoder",
+  version: "1.0.0",
+  d_model: 32,
+  d_ff: 64,
+  n_layers: 2,
+  max_seq: 128,
+  heads: 4,
+  vocab_size: 600,
+  seed_label: "azim-32-v1"
+}
+
+fn det_val(seed, i) {
+  let x = (seed * 1664525 + i * 1013904223) % 2147483648 in
+  let f = (x % 1000) + 0.0 in
+  ((f / 500.0) - 1.0) * 0.1
+}
+
+fn embedding_row(token_id) {
+  tensor.vector(list.build(32, fn(d) { det_val(token_id * 31 + 7, d * 17 + 3) }))
+}
+
+let W_Q = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(101, i) }))
+let W_K = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(202, i) }))
+let W_V = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(303, i) }))
+let W_O = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(404, i) }))
+let W_gate = tensor.matrix(64, 32, list.build(2048, fn(i) { det_val(505, i) }))
+let W_up   = tensor.matrix(64, 32, list.build(2048, fn(i) { det_val(606, i) }))
+let W_down = tensor.matrix(32, 64, list.build(2048, fn(i) { det_val(707, i) }))
+
+let W_Q2 = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(111, i) }))
+let W_K2 = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(222, i) }))
+let W_V2 = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(333, i) }))
+let W_O2 = tensor.matrix(32, 32, list.build(1024, fn(i) { det_val(444, i) }))
+let W_gate2 = tensor.matrix(64, 32, list.build(2048, fn(i) { det_val(555, i) }))
+let W_up2   = tensor.matrix(64, 32, list.build(2048, fn(i) { det_val(666, i) }))
+let W_down2 = tensor.matrix(32, 64, list.build(2048, fn(i) { det_val(777, i) }))
+
+let W_U_lm = tensor.matrix(600, 32, list.build(19200, fn(i) { det_val(909, i) }))
+
+let weights_sha256 = hash.sha256_text(json.canonicalize({
+  config: model_config,
+  W_Q_0: list.get(W_Q.data, 0),
+  W_U_0: list.get(W_U_lm.data, 0)
+}))
+
+export {
+  model_config,
+  embedding_row,
+  W_Q, W_K, W_V, W_O, W_gate, W_up, W_down,
+  W_Q2, W_K2, W_V2, W_O2, W_gate2, W_up2, W_down2,
+  W_U_lm,
+  weights_sha256,
+  det_val
+}

@@ -24,7 +24,7 @@ loop.run({
 
   lr: 0.001,
   epsilon: 10.0,
-  max_train_records: 28,
+  max_train_records: 53,
   steps_per_record: 5,
 
   min_accepted: 3,

@@ -1,0 +1,28 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/block_32") as b32
+import("../packages/azim_trial/weights_32") as w
+
+test "forward returns vector" {
+  type.of(b32.forward([1, 2, 3])) == "record"
+}
+
+test "forward output dim is 32" {
+  list.len(b32.forward([1, 2, 3]).data) == 32
+}
+
+test "lm logits dim is 600" {
+  list.len(b32.lm_logits([1, 2, 3]).data) == 600
+}
+
+test "different inputs give different logits" {
+  let a = b32.lm_logits([1, 2, 3]) in
+  let b = b32.lm_logits([4, 5, 6]) in
+  list.get(a.data, 0) != list.get(b.data, 0)
+}
+
+test "forward is deterministic" {
+  let a = b32.forward([1, 2, 3]) in
+  let b = b32.forward([1, 2, 3]) in
+  list.get(a.data, 0) == list.get(b.data, 0)
+}

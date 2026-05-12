@@ -1,0 +1,53 @@
+import("std/list") as list
+import("std/math") as math
+import("tensor") as tensor
+import("weights_32") as w
+
+fn attention_layer(vectors, WQ, WK, WV, WO) {
+  let d = w.model_config.d_model in
+  let scale = 1.0 / math.sqrt(d + 0.0) in
+  let q_all = list.map(vectors, fn(v) { tensor.matvec(WQ, tensor.rms_norm(v, 0.000001)) }) in
+  let k_all = list.map(vectors, fn(v) { tensor.matvec(WK, tensor.rms_norm(v, 0.000001)) }) in
+  let v_all = list.map(vectors, fn(v) { tensor.matvec(WV, tensor.rms_norm(v, 0.000001)) }) in
+  let last_i = list.len(vectors) - 1 in
+  let q = list.get(q_all, last_i) in
+  let scores = tensor.vector(list.build(list.len(k_all), fn(i) {
+    tensor.dot(q, list.get(k_all, i)) * scale
+  })) in
+  let probs = tensor.softmax(scores) in
+  let mixed = list.fold(list.range(0, list.len(v_all)),
+    tensor.vector(tensor.zeros(d)),
+    fn(acc, i) {
+      tensor.add(acc, tensor.scale(list.get(v_all, i), tensor.get1(probs, i)))
+    }) in
+  tensor.matvec(WO, mixed)
+}
+
+fn ffn_layer(x, Wgate, Wup, Wdown) {
+  let x_norm = tensor.rms_norm(x, 0.000001) in
+  let gate = tensor.silu(tensor.matvec(Wgate, x_norm)) in
+  let up = tensor.matvec(Wup, x_norm) in
+  let act = tensor.zip_with(gate, up, fn(a, b) { a * b }) in
+  tensor.matvec(Wdown, act)
+}
+
+fn transformer_block(vectors, WQ, WK, WV, WO, Wgate, Wup, Wdown) {
+  let residual = list.get(vectors, list.len(vectors) - 1) in
+  let attn = attention_layer(vectors, WQ, WK, WV, WO) in
+  let h1 = tensor.add(residual, attn) in
+  tensor.add(h1, ffn_layer(h1, Wgate, Wup, Wdown))
+}
+
+fn forward(token_ids) {
+  let vectors = list.map(token_ids, fn(id) { w.embedding_row(id) }) in
+  let h1 = transformer_block(vectors, w.W_Q, w.W_K, w.W_V, w.W_O, w.W_gate, w.W_up, w.W_down) in
+  let h1_vectors = list.concat([vectors, [h1]]) in
+  let h2 = transformer_block(h1_vectors, w.W_Q2, w.W_K2, w.W_V2, w.W_O2, w.W_gate2, w.W_up2, w.W_down2) in
+  tensor.rms_norm(h2, 0.000001)
+}
+
+fn lm_logits(token_ids) {
+  tensor.matvec(w.W_U_lm, forward(token_ids))
+}
+
+export { attention_layer, ffn_layer, transformer_block, forward, lm_logits }
