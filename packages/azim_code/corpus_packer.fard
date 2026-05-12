@@ -1,0 +1,79 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("tokenizer") as tok
+
+fn has_suffix(s, suffix) {
+  str.ends_with(s, suffix)
+}
+
+fn skip_path(p) {
+  str.starts_with(p, "out/") ||
+  str.starts_with(p, ".git/") ||
+  str.contains(p, "/target/") ||
+  str.contains(p, "/node_modules/")
+}
+
+fn walk_dir_limited(root, remaining) {
+  if remaining <= 0 then { files: [], remaining: 0 } else
+  let entries = fs.read_dir(root) in
+  list.fold(entries, { files: [], remaining: remaining }, fn(acc, e) {
+    if acc.remaining <= 0 then acc else
+    let p = if root == "." then e else path.join(root, e) in
+    if skip_path(p) then acc else
+    let st = fs.stat(p) in
+    if st.is_dir then acc
+    else if has_suffix(p, ".fard") && st.size < 20000 then
+      { files: list.append(acc.files, p), remaining: acc.remaining - 1 }
+    else acc
+  })
+}
+
+fn walk_dir(root) {
+  walk_dir_limited(root, 1000000).files
+}
+
+fn file_record(p) {
+  let src = fs.read_text(p) in
+  let tr = tok.tokenize_with_receipt(src) in
+  {
+    kind: "full_file",
+    path: p,
+    source_sha256: hash.sha256_text(src),
+    token_count: list.len(tr.tokens),
+    tokens: tr.tokens,
+    tokenizer_receipt: tr.receipt
+  }
+}
+
+fn jsonl(records) {
+  str.join(list.map(records, fn(r) { json.canonicalize(r) }), "\n")
+}
+
+fn pack(root, out_dir, max_files) {
+  let _ = fs.make_dir(out_dir) in
+  let files = if max_files < 0 then walk_dir(root) else walk_dir_limited(root, max_files).files in
+  let records = list.map(files, fn(p) { file_record(p) }) in
+  let payload = jsonl(records) in
+  let shard_path = path.join(out_dir, "train_shard_000.jsonl") in
+  let _w = fs.write_text(shard_path, payload) in
+  let manifest = {
+    component: "azim_code.corpus_packer",
+    version: "1.0.0",
+    root: root,
+    out_dir: out_dir,
+    file_count: list.len(files),
+    total_tokens: list.fold(records, 0, fn(a, r) { a + r.token_count }),
+    shard_path: shard_path,
+    shard_sha256: hash.sha256_text(payload),
+    tokenizer_vocab_sha256: tok.vocab_sha256
+  } in
+  let manifest_text = json.canonicalize(manifest) in
+  let _m = fs.write_text(path.join(out_dir, "manifest.json"), manifest_text) in
+  { ok: true, manifest: manifest, receipt: hash.sha256_text(manifest_text) }
+}
+
+export { has_suffix, skip_path, walk_dir, file_record, jsonl, pack }

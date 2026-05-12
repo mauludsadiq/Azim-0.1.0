@@ -1,0 +1,167 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("../azim_trial/tensor") as tensor
+import("../azim_trial/lm_head") as lm
+import("../azim_trial/lm_train") as lmt
+
+fn non_empty_lines(text) {
+  list.filter(str.split(text, "\n"), fn(line) { str.len(str.trim(line)) > 0 })
+}
+
+fn read_records(shard_path) {
+  list.map(non_empty_lines(fs.read_text(shard_path)), fn(line) {
+    json.decode(line)
+  })
+}
+
+fn token_window(tokens, max_tokens) {
+  if list.len(tokens) <= max_tokens then tokens else list.take(tokens, max_tokens)
+}
+
+fn loss_positions(token_ids) {
+  let n = list.len(token_ids) in
+  if n < 2 then [] else list.range(0, n - 1)
+}
+
+fn avg_loss_for_tokens(W, token_ids) {
+  let positions = loss_positions(token_ids) in
+  if list.len(positions) == 0 then 0.0 else
+  let losses = list.map(positions, fn(pos) {
+    lmt.nll_at_pos(W, token_ids, pos)
+  }) in
+  list.fold(losses, 0.0, fn(acc, x) { acc + x }) / list.len(losses)
+}
+
+fn train_step_tokens(W, token_ids, lr, epsilon, step_index) {
+  let ids = token_window(token_ids, 64) in
+  if list.len(ids) < 2 then {
+    W: W,
+    loss_before: 0.0,
+    loss_after: 0.0,
+    loss_delta: 0.0,
+    token_count: list.len(ids),
+    step_index: step_index
+  } else
+  let pos = step_index % (list.len(ids) - 1) in
+  let loss_before = lmt.nll_at_pos(W, ids, pos) in
+  let d = lmt.rotating_direction(W, step_index + 1) in
+  let n_params = list.len(W.data) in
+  let rows = list.get(W.dims, 0) in
+  let cols = list.get(W.dims, 1) in
+  let W_plus = tensor.matrix(rows, cols, list.build(n_params, fn(i) {
+    list.get(W.data, i) + epsilon * list.get(d.data, i)
+  })) in
+  let W_minus = tensor.matrix(rows, cols, list.build(n_params, fn(i) {
+    list.get(W.data, i) - epsilon * list.get(d.data, i)
+  })) in
+  let l_plus = lmt.nll_at_pos(W_plus, ids, pos) in
+  let l_minus = lmt.nll_at_pos(W_minus, ids, pos) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  let updated_data = list.build(n_params, fn(i) {
+    list.get(W.data, i) - lr * scale * list.get(d.data, i)
+  }) in
+  let W_updated = tensor.matrix(rows, cols, updated_data) in
+  let loss_after = lmt.nll_at_pos(W_updated, ids, pos) in
+  {
+    W: W_updated,
+    loss_before: loss_before,
+    loss_after: loss_after,
+    loss_delta: loss_after - loss_before,
+    token_count: list.len(ids),
+    step_index: step_index
+  }
+}
+
+fn train_record(W, record, lr, epsilon, step_index, steps_per_record) {
+  list.fold(list.range(0, steps_per_record), { W: W, losses: [], step_index: step_index }, fn(acc, local_step) {
+    let step = train_step_tokens(acc.W, record.tokens, lr, epsilon, acc.step_index) in
+    {
+      W: step.W,
+      losses: list.append(acc.losses, {
+        before: step.loss_before,
+        after: step.loss_after,
+        delta: step.loss_delta,
+        token_count: step.token_count,
+        step_index: step.step_index
+      }),
+      step_index: acc.step_index + 1
+    }
+  })
+}
+
+fn train_shard(shard_path, out_dir, lr, epsilon, max_records, steps_per_record) {
+  let _ = fs.make_dir(out_dir) in
+  let all_records = read_records(shard_path) in
+  let records = if max_records < 0 then all_records else list.take(all_records, max_records) in
+  let trained = list.fold(records, { W: lm.W_U_lm, history: [], step_index: 0 }, fn(acc, record) {
+    let r = train_record(acc.W, record, lr, epsilon, acc.step_index, steps_per_record) in
+    let avg_before = if list.len(r.losses) == 0 then 0.0 else
+      list.fold(r.losses, 0.0, fn(a, x) { a + x.before }) / list.len(r.losses) in
+    let avg_after = if list.len(r.losses) == 0 then 0.0 else
+      list.fold(r.losses, 0.0, fn(a, x) { a + x.after }) / list.len(r.losses) in
+    {
+      W: r.W,
+      step_index: r.step_index,
+      history: list.append(acc.history, {
+        kind: record.kind,
+        token_count: record.token_count,
+        source_sha256: record.source_sha256,
+        avg_loss_before: avg_before,
+        avg_loss_after: avg_after,
+        avg_loss_delta: avg_after - avg_before,
+        steps: list.len(r.losses)
+      })
+    }
+  }) in
+  let total_steps = trained.step_index in
+  let avg_loss_before = if list.len(trained.history) == 0 then 0.0 else
+    list.fold(trained.history, 0.0, fn(a, h) { a + h.avg_loss_before }) / list.len(trained.history) in
+  let avg_loss_after = if list.len(trained.history) == 0 then 0.0 else
+    list.fold(trained.history, 0.0, fn(a, h) { a + h.avg_loss_after }) / list.len(trained.history) in
+  let checkpoint = {
+    component: "azim_code.code_train_adapter",
+    version: "1.0.0",
+    shard_path: shard_path,
+    shard_sha256: hash.sha256_text(fs.read_text(shard_path)),
+    lr: lr,
+    epsilon: epsilon,
+    max_records: max_records,
+    steps_per_record: steps_per_record,
+    record_count: list.len(records),
+    total_steps: total_steps,
+    avg_loss_before: avg_loss_before,
+    avg_loss_after: avg_loss_after,
+    avg_loss_delta: avg_loss_after - avg_loss_before,
+    W_U_lm_dims: trained.W.dims,
+    W_U_lm_data: trained.W.data,
+    history: trained.history
+  } in
+  let checkpoint_text = json.canonicalize(checkpoint) in
+  let checkpoint_path = path.join(out_dir, "code_checkpoint.json") in
+  let _w = fs.write_text(checkpoint_path, checkpoint_text) in
+  {
+    ok: true,
+    checkpoint_path: checkpoint_path,
+    checkpoint_sha256: hash.sha256_text(checkpoint_text),
+    record_count: list.len(records),
+    total_steps: total_steps,
+    avg_loss_before: avg_loss_before,
+    avg_loss_after: avg_loss_after,
+    avg_loss_delta: avg_loss_after - avg_loss_before
+  }
+}
+
+export {
+  non_empty_lines,
+  read_records,
+  token_window,
+  loss_positions,
+  avg_loss_for_tokens,
+  train_step_tokens,
+  train_record,
+  train_shard
+}

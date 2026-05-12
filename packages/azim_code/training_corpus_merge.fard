@@ -1,0 +1,56 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+
+fn read_text_or_empty(p) {
+  if fs.exists(p) then fs.read_text(p) else ""
+}
+
+fn non_empty_line_count(text) {
+  if str.len(text) == 0 then 0 else
+  let lines = str.split(text, "\n") in
+  len(list.filter(lines, fn(x) { str.len(str.trim(x)) > 0 }))
+}
+
+
+fn merge(base_shard_path, accepted_shard_path, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let base = read_text_or_empty(base_shard_path) in
+  let accepted = read_text_or_empty(accepted_shard_path) in
+  let sep = if str.len(base) > 0 && str.len(accepted) > 0 then "\n" else "" in
+  let merged = str.concat([base, sep, accepted]) in
+  let out_shard_path = path.join(out_dir, "train_merged_000.jsonl") in
+  let _w = fs.write_text(out_shard_path, merged) in
+  let manifest = {
+    component: "azim_code.training_corpus_merge",
+    version: "1.0.0",
+    base_shard_path: base_shard_path,
+    accepted_shard_path: accepted_shard_path,
+    out_dir: out_dir,
+    out_shard_path: out_shard_path,
+    base_sha256: hash.sha256_text(base),
+    accepted_sha256: hash.sha256_text(accepted),
+    merged_sha256: hash.sha256_text(merged),
+    base_records: non_empty_line_count(base),
+    accepted_records: non_empty_line_count(accepted),
+    merged_records: non_empty_line_count(merged)
+  } in
+  let manifest_text = json.canonicalize(manifest) in
+  let manifest_path = path.join(out_dir, "manifest.json") in
+  let _m = fs.write_text(manifest_path, manifest_text) in
+  {
+    ok: true,
+    out_shard_path: out_shard_path,
+    manifest_path: manifest_path,
+    base_records: manifest.base_records,
+    accepted_records: manifest.accepted_records,
+    merged_records: manifest.merged_records,
+    merged_sha256: manifest.merged_sha256,
+    receipt: hash.sha256_text(manifest_text)
+  }
+}
+
+export { read_text_or_empty, non_empty_line_count, merge }

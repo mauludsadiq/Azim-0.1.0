@@ -1,0 +1,11 @@
+import("packages/azim_code/tokenizer") as tok
+
+let r = tok.tokenize_with_receipt("fn add(a, b) {\n  a + b\n}")
+{
+  ok: tok.vocab_size() == 59,
+  token_count: len(r.tokens),
+  first: r.tokens[0],
+  last: r.tokens[len(r.tokens) - 1],
+  receipt: r.receipt,
+  pieces: r.pieces
+}

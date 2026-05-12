@@ -1,0 +1,6 @@
+import("packages/azim_code/accepted_dataset") as ds
+
+ds.build(
+  "out/azim_code_generated_candidates/generation_manifest.json",
+  "out/azim_code_accepted_dataset"
+)

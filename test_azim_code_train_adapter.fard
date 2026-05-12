@@ -1,0 +1,10 @@
+import("packages/azim_code/code_train_adapter") as train
+
+train.train_shard(
+  "out/azim_code_retraining_corpus/train_merged_000.jsonl",
+  "out/azim_code_train_adapter",
+  0.001,
+  10.0,
+  13,
+  1
+)

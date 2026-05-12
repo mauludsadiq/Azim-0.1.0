@@ -1,0 +1,7 @@
+import("packages/azim_code/training_corpus_merge") as merge
+
+merge.merge(
+  "out/azim_code_corpus_test/train_shard_000.jsonl",
+  "out/azim_code_accepted_dataset/accepted_shard_000.jsonl",
+  "out/azim_code_retraining_corpus"
+)

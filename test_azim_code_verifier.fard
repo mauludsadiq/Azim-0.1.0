@@ -1,0 +1,3 @@
+import("packages/azim_code/verifier") as v
+
+v.verify_candidate("{ ok: true, value: 42 }", "out/azim_code_candidates/candidate_000.fard", "out/azim_code_candidate_000_run")

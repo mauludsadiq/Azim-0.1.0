@@ -1,0 +1,99 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("tokenizer") as tok
+
+fn read_json(p) {
+  json.decode(fs.read_text(p))
+}
+
+fn read_text_sha(p) {
+  hash.sha256_text(fs.read_text(p))
+}
+
+fn verifier_receipts_from_generation_manifest(gen_manifest) {
+  list.map(gen_manifest.records, fn(r) {
+    {
+      index: r.result.index,
+      accepted: r.result.accepted,
+      class: r.result.class,
+      candidate_path: r.result.candidate_path,
+      generation_receipt: r.result.generation.receipt,
+      verification_receipt: r.result.verification.receipt,
+      run_receipt: r.result.verification.result.run.receipt,
+      verify_receipt: r.result.verification.result.verify.receipt
+    }
+  })
+}
+
+fn build(base_manifest_path, accepted_manifest_path, merged_manifest_path, generation_manifest_path, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+
+  let base_manifest = read_json(base_manifest_path) in
+  let accepted_manifest = read_json(accepted_manifest_path) in
+  let merged_manifest = read_json(merged_manifest_path) in
+  let generation_manifest = read_json(generation_manifest_path) in
+
+  let audit = {
+    component: "azim_code.retraining_manifest",
+    version: "1.0.0",
+
+    tokenizer: {
+      vocab_size: tok.vocab_size(),
+      vocab_sha256: tok.vocab_sha256,
+      vocabulary: tok.vocabulary
+    },
+
+    inputs: {
+      base_manifest_path: base_manifest_path,
+      base_manifest_sha256: read_text_sha(base_manifest_path),
+      base_shard_path: base_manifest.shard_path,
+      base_shard_sha256: base_manifest.shard_sha256,
+      base_records: base_manifest.file_count,
+      base_tokens: base_manifest.total_tokens,
+
+      accepted_manifest_path: accepted_manifest_path,
+      accepted_manifest_sha256: read_text_sha(accepted_manifest_path),
+      accepted_shard_path: accepted_manifest.shard_path,
+      accepted_shard_sha256: accepted_manifest.shard_sha256,
+      accepted_records: accepted_manifest.accepted_count,
+      accepted_tokens: accepted_manifest.total_tokens,
+
+      merged_manifest_path: merged_manifest_path,
+      merged_manifest_sha256: read_text_sha(merged_manifest_path),
+      merged_shard_path: merged_manifest.out_shard_path,
+      merged_shard_sha256: merged_manifest.merged_sha256,
+      merged_records: merged_manifest.merged_records,
+
+      generation_manifest_path: generation_manifest_path,
+      generation_manifest_sha256: read_text_sha(generation_manifest_path),
+      generation_total: generation_manifest.total,
+      generation_accepted: generation_manifest.accepted_count,
+      generation_rejected: generation_manifest.rejected_count
+    },
+
+    verifier_receipts: verifier_receipts_from_generation_manifest(generation_manifest)
+  } in
+
+  let audit_text = json.canonicalize(audit) in
+  let audit_path = path.join(out_dir, "retraining_manifest.json") in
+  let _w = fs.write_text(audit_path, audit_text) in
+
+  {
+    ok: true,
+    audit_path: audit_path,
+    audit_sha256: hash.sha256_text(audit_text),
+    merged_shard_path: merged_manifest.out_shard_path,
+    merged_shard_sha256: merged_manifest.merged_sha256,
+    verifier_receipt_count: list.len(audit.verifier_receipts)
+  }
+}
+
+export {
+  read_json,
+  read_text_sha,
+  verifier_receipts_from_generation_manifest,
+  build
+}

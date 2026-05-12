@@ -1,0 +1,11 @@
+import("packages/azim_code/generation_wrapper") as gen
+
+gen.generate_batch(
+  [
+    "return value",
+    "write add function",
+    "write main function"
+  ],
+  "out/azim_code_generated_candidates",
+  "out/azim_code_generated_runs"
+)

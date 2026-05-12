@@ -1,0 +1,109 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("tokenizer") as tok
+import("verifier") as verifier
+
+fn deterministic_completion(prompt, index) {
+  if str.contains(prompt, "value") then "{ ok: true, value: 42 }"
+  else if str.contains(prompt, "add") then "fn add(a, b) {\n  a + b\n}\n{ ok: true, value: add(20, 22) }"
+  else if str.contains(prompt, "main") then "fn main() {\n  42\n}\n{ ok: true, value: main() }"
+  else if index % 3 == 0 then "{ ok: true, value: 42 }"
+  else if index % 3 == 1 then "let x = 42\n{ ok: true, value: x }"
+  else "fn main() {\n  42\n}\n{ ok: true, value: main() }"
+}
+
+fn candidate_path(candidate_dir, index) {
+  path.join(candidate_dir, str.concat(["candidate_", str.from(index), ".fard"]))
+}
+
+fn run_out_path(run_dir, index) {
+  path.join(run_dir, str.concat(["candidate_", str.from(index), "_run"]))
+}
+
+fn generation_record(prompt, source, index) {
+  let tokenized_prompt = tok.tokenize_with_receipt(prompt) in
+  let tokenized_source = tok.tokenize_with_receipt(source) in
+  let record = {
+    component: "azim_code.generation_wrapper",
+    version: "1.0.0",
+    index: index,
+    prompt: prompt,
+    prompt_sha256: hash.sha256_text(prompt),
+    source_sha256: hash.sha256_text(source),
+    prompt_tokens: tokenized_prompt.tokens,
+    source_tokens: tokenized_source.tokens,
+    prompt_tokenizer_receipt: tokenized_prompt.receipt,
+    source_tokenizer_receipt: tokenized_source.receipt
+  } in
+  {
+    record: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn generate_one(prompt, index, candidate_dir, run_dir) {
+  let _c = fs.make_dir(candidate_dir) in
+  let _r = fs.make_dir(run_dir) in
+  let source = deterministic_completion(prompt, index) in
+  let gen = generation_record(prompt, source, index) in
+  let cpath = candidate_path(candidate_dir, index) in
+  let rout = run_out_path(run_dir, index) in
+  let verified = verifier.verify_candidate(source, cpath, rout) in
+  let record = {
+    index: index,
+    prompt: prompt,
+    source: source,
+    candidate_path: cpath,
+    run_out: rout,
+    generation: gen,
+    verification: verified,
+    accepted: verified.result.accepted,
+    class: verified.result.class
+  } in
+  {
+    result: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn generate_batch(prompts, candidate_dir, run_dir) {
+  let records = list.map(list.range(0, list.len(prompts)), fn(i) {
+    generate_one(list.get(prompts, i), i, candidate_dir, run_dir)
+  }) in
+  let accepted = list.filter(records, fn(r) { r.result.accepted }) in
+  let rejected = list.filter(records, fn(r) { !r.result.accepted }) in
+  let manifest = {
+    component: "azim_code.generation_wrapper.batch",
+    version: "1.0.0",
+    candidate_dir: candidate_dir,
+    run_dir: run_dir,
+    total: list.len(records),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    records: records
+  } in
+  let manifest_text = json.canonicalize(manifest) in
+  let _m = fs.write_text(path.join(candidate_dir, "generation_manifest.json"), manifest_text) in
+  {
+    ok: true,
+    total: list.len(records),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    manifest_path: path.join(candidate_dir, "generation_manifest.json"),
+    manifest_sha256: hash.sha256_text(manifest_text),
+    records: records
+  }
+}
+
+export {
+  deterministic_completion,
+  candidate_path,
+  run_out_path,
+  generation_record,
+  generate_one,
+  generate_batch
+}

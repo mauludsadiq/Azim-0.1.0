@@ -1,0 +1,70 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("tokenizer") as tok
+
+fn accepted_records_from_manifest(manifest) {
+  let accepted = list.filter(manifest.records, fn(r) { r.result.accepted }) in
+  list.map(accepted, fn(r) {
+    let src = r.result.source in
+    let tr = tok.tokenize_with_receipt(src) in
+    {
+      kind: "accepted_candidate",
+      index: r.result.index,
+      prompt: r.result.prompt,
+      candidate_path: r.result.candidate_path,
+      run_out: r.result.run_out,
+      class: r.result.class,
+      source: src,
+      source_sha256: hash.sha256_text(src),
+      token_count: list.len(tr.tokens),
+      tokens: tr.tokens,
+      tokenizer_receipt: tr.receipt,
+      generation_receipt: r.result.generation.receipt,
+      verification_receipt: r.result.verification.receipt
+    }
+  })
+}
+
+fn jsonl(records) {
+  str.join(list.map(records, fn(r) { json.canonicalize(r) }), "\n")
+}
+
+fn build(manifest_path, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let manifest_text = fs.read_text(manifest_path) in
+  let manifest = json.decode(manifest_text) in
+  let records = accepted_records_from_manifest(manifest) in
+  let payload = jsonl(records) in
+  let shard_path = path.join(out_dir, "accepted_shard_000.jsonl") in
+  let _w = fs.write_text(shard_path, payload) in
+  let out_manifest = {
+    component: "azim_code.accepted_dataset",
+    version: "1.0.0",
+    input_manifest_path: manifest_path,
+    input_manifest_sha256: hash.sha256_text(manifest_text),
+    out_dir: out_dir,
+    shard_path: shard_path,
+    accepted_count: list.len(records),
+    total_tokens: list.fold(records, 0, fn(a, r) { a + r.token_count }),
+    shard_sha256: hash.sha256_text(payload),
+    tokenizer_vocab_sha256: tok.vocab_sha256
+  } in
+  let out_manifest_text = json.canonicalize(out_manifest) in
+  let out_manifest_path = path.join(out_dir, "manifest.json") in
+  let _m = fs.write_text(out_manifest_path, out_manifest_text) in
+  {
+    ok: true,
+    accepted_count: list.len(records),
+    total_tokens: out_manifest.total_tokens,
+    shard_path: shard_path,
+    manifest_path: out_manifest_path,
+    shard_sha256: out_manifest.shard_sha256,
+    receipt: hash.sha256_text(out_manifest_text)
+  }
+}
+
+export { accepted_records_from_manifest, jsonl, build }

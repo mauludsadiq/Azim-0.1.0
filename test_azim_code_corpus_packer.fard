@@ -1,0 +1,3 @@
+import("packages/azim_code/corpus_packer") as packer
+
+packer.pack("packages/azim_trial", "out/azim_code_corpus_test", 10)

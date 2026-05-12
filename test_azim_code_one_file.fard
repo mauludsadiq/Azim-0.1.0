@@ -1,0 +1,3 @@
+import("packages/azim_code/corpus_packer") as packer
+
+packer.file_record("packages/azim_trial/tokenizer.fard")

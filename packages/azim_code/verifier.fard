@@ -1,0 +1,112 @@
+import("std/process") as process
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/json") as json
+import("std/hash") as hash
+
+fn classify_output(exit_code, stdout, stderr) {
+  let text = str.concat([stdout, "\n", stderr]) in
+  if exit_code == 0 then "accepted"
+  else if str.contains(text, "Parse") || str.contains(text, "parse") || str.contains(text, "unexpected token") then "syntax_error"
+  else if str.contains(text, "arity") then "arity_error"
+  else if str.contains(text, "undefined") || str.contains(text, "not found") then "undefined_symbol"
+  else if str.contains(text, "type") || str.contains(text, "Type") then "type_error"
+  else if str.contains(text, "timeout") then "timeout"
+  else if str.contains(text, "test") || str.contains(text, "failed") then "test_failure"
+  else "runtime_error"
+}
+
+fn run_program(program_path, out_dir) {
+  let r = process.capture("fardrun", ["run", "--program", program_path, "--out", out_dir]) in
+  let class = classify_output(r.exit_code, r.stdout, r.stderr) in
+  let record = {
+    mode: "run",
+    program_path: program_path,
+    out_dir: out_dir,
+    ok: r.exit_code == 0,
+    class: class,
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr
+  } in
+  {
+    result: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn test_program(program_path) {
+  let r = process.capture("fardrun", ["test", "--program", program_path, "--json"]) in
+  let class = classify_output(r.exit_code, r.stdout, r.stderr) in
+  let record = {
+    mode: "test",
+    program_path: program_path,
+    ok: r.exit_code == 0,
+    class: class,
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr
+  } in
+  {
+    result: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn verify_run_out(out_dir) {
+  let r = process.capture("fardrun", ["verify", "--out", out_dir, "--verbose"]) in
+  let record = {
+    mode: "verify",
+    out_dir: out_dir,
+    ok: r.exit_code == 0,
+    class: if r.exit_code == 0 then "receipt_verified" else "receipt_mismatch",
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr
+  } in
+  {
+    result: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn write_candidate(path_out, source) {
+  let parent = path.dir(path_out) in
+  let _ = fs.make_dir(parent) in
+  let _w = fs.write_text(path_out, source) in
+  {
+    path: path_out,
+    source_sha256: hash.sha256_text(source)
+  }
+}
+
+fn verify_candidate(source, candidate_path, out_dir) {
+  let written = write_candidate(candidate_path, source) in
+  let run_r = run_program(candidate_path, out_dir) in
+  let verify_r = if run_r.result.ok then verify_run_out(out_dir) else {
+    result: {
+      mode: "verify",
+      out_dir: out_dir,
+      ok: false,
+      class: "not_run",
+      exit_code: -1,
+      stdout: "",
+      stderr: ""
+    },
+    receipt: "sha256:not_run"
+  } in
+  let record = {
+    written: written,
+    run: run_r,
+    verify: verify_r,
+    accepted: run_r.result.ok && verify_r.result.ok,
+    class: if run_r.result.ok then verify_r.result.class else run_r.result.class
+  } in
+  {
+    result: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate }
