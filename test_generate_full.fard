@@ -1,0 +1,32 @@
+import("packages/azim_trial/lm_head") as lm
+import("packages/azim_trial/tokenizer") as tok
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+
+# Load final weights
+let final_raw = fs.read_text("out/lm_checkpoints2/shard_79.json") in
+let final = json.decode(final_raw) in
+let W_final = tensor.matrix(list.get(final.W_U_lm_dims, 0), list.get(final.W_U_lm_dims, 1), final.W_U_lm_data) in
+
+# Autoregressive generation
+fn generate(prompt, max_tokens) {
+  let tokens = tok.tokenize(prompt) in
+  let result = list.fold(list.range(0, max_tokens), { text: prompt, tokens: tokens }, fn(acc, _) {
+    let hidden = lm.hidden_for_tokens(acc.tokens) in
+    let logits = tensor.matvec(W_final, hidden) in
+    let next_id = list.fold(list.range(0, list.len(logits.data)), 0, fn(best, i) {
+      if list.get(logits.data, i) > list.get(logits.data, best) then i else best
+    }) in
+    let next_tokens = list.append(acc.tokens, next_id) in
+    { text: str.concat([acc.text, " [", str.from(next_id), "]"]), tokens: next_tokens }
+  }) in
+  result.text
+}
+
+# Generate 10 tokens
+let output = generate("The cat sat", 10) in
+let _ = fs.write_text("out/generate_test/autoregressive.txt", output) in
+output

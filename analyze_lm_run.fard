@@ -1,0 +1,72 @@
+import("std/fs") as fs
+import("std/json") as json
+import("std/list") as list
+import("std/math") as math
+import("std/str") as str
+import("std/float") as float
+
+let rand_baseline = math.log(129.0)
+
+fn shard_index(filename) {
+  let parts = str.split(filename, "_") in
+  let last = list.get(parts, list.len(parts) - 1) in
+  let num = str.split(last, ".") in
+  let s = list.get(num, 0) in
+  list.fold(str.chars(s), 0, fn(acc, c) {
+    acc * 10 + list.fold(list.range(0, 10), 0, fn(a, i) {
+      if str.from(i) == c then i else a
+    })
+  })
+}
+
+fn load_shards(dir) {
+  let entries = fs.read_dir(dir) in
+  let jsons = list.filter(entries, fn(e) { str.ends_with(e, ".json") }) in
+  let loaded = list.map(jsons, fn(e) {
+    let d = json.decode(fs.read_text(str.concat([dir, "/", e]))) in
+    { idx: d.shard_index, loss: d.avg_loss, filename: e }
+  }) in
+  list.sort_by_int_key(loaded, fn(r) { r.idx })
+}
+
+fn mean(xs) {
+  list.fold(xs, 0.0, fn(acc, x) { acc + x }) / list.len(xs)
+}
+
+fn slope(losses) {
+  let n = list.len(losses) in
+  let xs = list.range(0, n) in
+  let mx = mean(list.map(xs, fn(x) { x + 0.0 })) in
+  let my = mean(losses) in
+  let num = list.fold(list.range(0, n), 0.0, fn(acc, i) {
+    let x = list.get(xs, i) + 0.0 in
+    let y = list.get(losses, i) in
+    acc + (x - mx) * (y - my)
+  }) in
+  let den = list.fold(list.range(0, n), 0.0, fn(acc, i) {
+    let x = list.get(xs, i) + 0.0 in
+    acc + (x - mx) * (x - mx)
+  }) in
+  num / den
+}
+
+let shards = load_shards("out/lm_checkpoints2")
+let losses = list.map(shards, fn(s) { s.loss })
+let n = list.len(shards)
+let s = slope(losses)
+let mn = mean(losses)
+let below = list.len(list.filter(losses, fn(l) { l < rand_baseline }))
+let min_loss = list.fold(losses, list.get(losses, 0), fn(acc, x) { if x < acc then x else acc })
+let max_loss = list.fold(losses, list.get(losses, 0), fn(acc, x) { if x > acc then x else acc })
+
+{
+  shards_complete: n,
+  random_baseline: rand_baseline,
+  mean_loss: mn,
+  min_loss: min_loss,
+  max_loss: max_loss,
+  below_random: below,
+  trend_slope: s,
+  projected_final: list.get(losses, 0) + s * 79.0,
+  improving: s < 0.0
+}

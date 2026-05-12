@@ -7,6 +7,7 @@ import("std/hash") as hash
 import("../azim_trial/tensor") as tensor
 import("../azim_trial/lm_head") as lm
 import("../azim_trial/lm_train") as lmt
+import("code_checkpoint_loader") as loader
 
 fn non_empty_lines(text) {
   list.filter(str.split(text, "\n"), fn(line) { str.len(str.trim(line)) > 0 })
@@ -93,11 +94,12 @@ fn train_record(W, record, lr, epsilon, step_index, steps_per_record) {
   })
 }
 
-fn train_shard(shard_path, out_dir, lr, epsilon, max_records, steps_per_record) {
+fn train_shard_from_checkpoint(shard_path, out_dir, lr, epsilon, max_records, steps_per_record, checkpoint_path) {
   let _ = fs.make_dir(out_dir) in
+  let start = loader.load_or_initial(checkpoint_path) in
   let all_records = read_records(shard_path) in
   let records = if max_records < 0 then all_records else list.take(all_records, max_records) in
-  let trained = list.fold(records, { W: lm.W_U_lm, history: [], step_index: 0 }, fn(acc, record) {
+  let trained = list.fold(records, { W: start.W, history: [], step_index: start.previous_total_steps }, fn(acc, record) {
     let r = train_record(acc.W, record, lr, epsilon, acc.step_index, steps_per_record) in
     let avg_before = if list.len(r.losses) == 0 then 0.0 else
       list.fold(r.losses, 0.0, fn(a, x) { a + x.before }) / list.len(r.losses) in
@@ -155,6 +157,10 @@ fn train_shard(shard_path, out_dir, lr, epsilon, max_records, steps_per_record) 
   }
 }
 
+fn train_shard(shard_path, out_dir, lr, epsilon, max_records, steps_per_record) {
+  train_shard_from_checkpoint(shard_path, out_dir, lr, epsilon, max_records, steps_per_record, path.join(out_dir, "code_checkpoint.json"))
+}
+
 export {
   non_empty_lines,
   read_records,
@@ -163,5 +169,6 @@ export {
   avg_loss_for_tokens,
   train_step_tokens,
   train_record,
+  train_shard_from_checkpoint,
   train_shard
 }

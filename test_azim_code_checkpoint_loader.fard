@@ -1,0 +1,3 @@
+import("packages/azim_code/code_checkpoint_loader") as loader
+
+loader.load_or_initial("out/azim_code_train_adapter/code_checkpoint.json")

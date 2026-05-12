@@ -1,0 +1,8 @@
+import("std/fs") as fs
+import("std/json") as json
+import("std/str") as str
+import("std/type") as type
+import("std/float") as float
+
+let d = json.decode(fs.read_text("out/lm_checkpoints2/shard_0.json"))
+{ shard_index: d.shard_index, type_of: type.of(d.shard_index), as_int: float.to_int(d.shard_index) }

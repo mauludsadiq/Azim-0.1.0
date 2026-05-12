@@ -1,0 +1,32 @@
+import("packages/azim_trial/lm_head") as lm
+import("packages/azim_trial/tokenizer") as tok
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+
+# Load final weights
+let final_raw = fs.read_text("out/lm_checkpoints2/shard_79.json") in
+let final = json.decode(final_raw) in
+let W_final = tensor.matrix(list.get(final.W_U_lm_dims, 0), list.get(final.W_U_lm_dims, 1), final.W_U_lm_data) in
+
+# Test on a prompt
+let prompt = "The cat sat" in
+let tokens = tok.tokenize(prompt) in
+let hidden = lm.hidden_for_tokens(tokens) in
+let logits = tensor.matvec(W_final, hidden) in
+
+# Get top prediction
+let top_idx = list.fold(list.range(0, list.len(logits.data)), 0, fn(best, i) {
+  if list.get(logits.data, i) > list.get(logits.data, best) then i else best
+}) in
+
+# Write explicit output file
+let result_text = str.concat([
+  "Prompt: ", prompt, "\n",
+  "Top token ID: ", str.from(top_idx), "\n",
+  "Top logit: ", str.from(list.get(logits.data, top_idx)), "\n"
+]) in
+let _ = fs.write_text("out/generate_test/output.txt", result_text) in
+result_text
