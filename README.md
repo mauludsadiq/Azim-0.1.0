@@ -2,67 +2,70 @@
 
 Deterministic distributed AI training on FARD.
 
-Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 9,043 lines of code.
+Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 10,970 lines of code.
 
 -----
 
 ## Training Results
 
-Full OpenWebText run. All 80 shards. 15 hours. MacBook Pro. Pure FARD.
+Full OpenWebText classifier run. All 80 shards. 15 hours. MacBook Pro. Pure FARD.
 
 ```
 Shard  0:  0.7605
-Shard 10:  0.1883
 Shard 20:  0.0981
-Shard 30:  0.0660
 Shard 40:  0.0491
-Shard 50:  0.0392
 Shard 60:  0.0327
-Shard 70:  0.0281
 Shard 79:  0.0244
 ```
 
-96.8% loss reduction. Every step cryptographically receipted. Audit proof complete.
+96.8% loss reduction. Every step cryptographically receipted.
 
-LM objective run in progress — next-token prediction over full vocabulary.
+LM objective run (next-token prediction over 129-token vocabulary). 62/80 shards complete. Loss trend: -0.021 per shard.
 
 -----
 
 ## Status
 
-|Milestone                         |Status |
-|----------------------------------|-------|
-|Deterministic runtime             |done   |
-|Cryptographic receipt chain       |done   |
-|Real gradient descent (SPSA)      |done   |
-|Full OWT training run (classifier)|done   |
-|Neural path authoritative         |done   |
-|Next-token prediction objective   |done   |
-|Autoregressive generation         |done   |
-|LM training on OWT                |running|
-|BPE tokenizer                     |next   |
-|Larger d_model / more layers      |next   |
+|Milestone                         |Status                |
+|----------------------------------|----------------------|
+|Deterministic runtime             |done                  |
+|Cryptographic receipt chain       |done                  |
+|Real gradient descent (SPSA)      |done                  |
+|Full OWT training run (classifier)|done                  |
+|Neural path authoritative         |done                  |
+|Next-token prediction objective   |done                  |
+|Autoregressive generation         |done                  |
+|linalg native ops (28x speedup)   |done                  |
+|LM training on OWT                |running — 62/80 shards|
+|Verifier-gated self-training loop |done                  |
+|Scale gate                        |done                  |
+|BPE tokenizer                     |next                  |
+|Larger d_model / more layers      |next                  |
 
 -----
 
 ## What Azim Does
 
-Azim trains a language model on real data. The neural path is authoritative — the model’s logits determine output, not a hardcoded lookup. It downloads OpenWebText shards, runs next-token prediction, receipts every step, and streams through the full dataset.
+Azim trains a language model on real data with a closed verifier-gated self-improvement loop.
 
-The training pipeline:
+Two training pipelines:
+
+**OWT Pipeline** — trains on real web text:
 
 - Downloads OpenWebText parquet shards from HuggingFace
-- Extracts real web text via strings extraction and quality filtering
-- Tokenizes with a fixed greedy vocabulary (129 tokens)
-- Embeds tokens into distinct 8-dimensional vectors per token ID
-- Runs a transformer block: RMS norm, attention, FFN, residual
-- Computes per-position hidden states
-- Projects to vocab_size (129) logits via W_U_lm
-- Computes NLL loss over next-token targets
-- Updates W_U_lm via SPSA gradient descent
-- Generates text autoregressively via greedy decoding
-- Chains SHA-256 receipts over every computed output
+- Extracts real web text, tokenizes, trains W_U_lm via SPSA
 - Checkpoints W_U_lm with receipt after each shard
+- Generates text autoregressively via greedy decoding
+
+**Azim-Code Pipeline** — trains on its own verified source code:
+
+- Packs FARD source files into tokenized training corpus
+- Generates FARD code candidates
+- Executes each candidate via fardrun — real execution, not simulation
+- Accepts candidates that run and verify
+- Trains W_U_lm on accepted corpus only
+- Produces retraining manifest with full cryptographic audit chain
+- Gates scale decisions on measured loss decrease + verified receipts
 
 -----
 
@@ -79,56 +82,53 @@ The training pipeline:
 |6    |Distributed Training — three-node cluster with real RSSM train steps      |
 |7    |Async Validator — leakage probe, tower independence, backpressure control |
 |8    |Full Run + Audit Proof — end-to-end receipt chain with final proof        |
+|Code |Verifier-gated self-training on FARD source                               |
 
 -----
 
-## LM Objective
+## Verifier-Gated Self-Training
 
-Next-token prediction over the full vocabulary:
-
-```
-for each position pos in token_ids[0..n-1]:
-    hidden = rms_norm(block(embed(token_ids[0..pos])))
-    logits = W_U_lm . hidden          # shape: vocab_size x 1
-    loss   = NLL(logits, token_ids[pos+1])
-
-grad = SPSA(loss, W_U_lm)
-W_U_lm = W_U_lm - lr * grad
-```
-
-W_U_lm is 129x8 — projects 8-dimensional hidden state to 129-token vocabulary.
-
------
-
-## Autoregressive Generation
+Azim trains on its own verified outputs:
 
 ```
-prompt_ids = tokenize(prompt)
-while steps < max_new_tokens:
-    hidden = block(embed(prompt_ids))
-    logits = W_U_lm . hidden
-    next_id = argmax(logits)
-    if next_id == EOS: stop
-    prompt_ids = append(prompt_ids, next_id)
+pack FARD source files -> tokenized corpus
+generate FARD candidates
+execute each candidate via fardrun
+accept if execution succeeds + receipt verifies
+train W_U_lm on accepted corpus
+produce retraining manifest (full audit chain)
+scale gate: require loss decrease + N accepted + all receipts
 ```
 
-Greedy decoding. Deterministic. Receipted.
+Scale gate result:
+
+```
+loss_before: 5.831
+loss_after:  5.827
+accepted:    3/3
+receipts:    3/3
+decision:    PASS
+```
+
+Every input is SHA-256 hashed. Every generation has a run receipt and verify receipt. The full provenance chain from source files to trained weights is captured in one auditable document.
 
 -----
 
 ## Gradient Method
 
-SPSA with fixed direction vector:
+SPSA with rotating direction:
 
 ```
-d = fixed +/-1 direction (precomputed from hash, stable across steps)
+d = hash-derived +/-1 direction (from W state + step index)
 l_plus  = NLL(W + e*d, tokens, pos)
 l_minus = NLL(W - e*d, tokens, pos)
 grad    = ((l_plus - l_minus) / 2e) * d
 W       = W - lr * grad
 ```
 
-3 forward passes per step regardless of parameter count.
+3 forward passes per step. Direction rotates every step via weight state hash.
+
+Native linalg ops via std/linalg — 28x speedup over interpreted tensor operations.
 
 -----
 
@@ -150,11 +150,11 @@ Receipts chain across steps into a final audit proof.
 
 ## Test Coverage
 
-98 test files. 0 failures.
+141 test files. 0 failures.
 
 |Area                     |Tests|
 |-------------------------|-----|
-|Tensor core              |14   |
+|Tensor core + linalg     |20   |
 |Tokenizer                |9    |
 |Attention + FFN          |10   |
 |Loss + Gradients         |14   |
@@ -166,46 +166,37 @@ Receipts chain across steps into a final audit proof.
 |Phase contracts (6, 7, 8)|29   |
 |OWT loader + training    |8    |
 |LM objective + generation|13   |
+|Azim-Code pipeline       |9    |
 |Neural authority         |6    |
-|Integration + other      |303  |
+|Integration + other      |341  |
 
 -----
 
 ## Repository Structure
 
 ```
-packages/azim_trial/
-  tensor.fard
-  weights.fard
-  embedding.fard
-  attention.fard
-  block.fard
-  loss.fard
-  lm_head.fard
-  lm_train.fard
-  lm_owt_train.fard
-  generation_lm.fard
-  train_step.fard
-  rssm.fard
-  distributed_scan.fard
-  cluster_run_1p5b.fard
-  async_validator.fard
-  owt_loader.fard
-  owt_train.fard
-  owt_checkpoint.fard
-  owt_full_run.fard
-  openwebtext_full_run.fard
-  final_audit_proof.fard
+packages/azim_trial/       — core LM training system
+  tensor.fard              — native linalg ops
+  linalg_bridge.fard       — float <-> linalg bytes bridge
+  lm_head.fard             — 129-token LM head
+  lm_train.fard            — SPSA training with rotating direction
+  lm_owt_train.fard        — OWT streaming pipeline
+  generation_lm.fard       — autoregressive greedy generation
   ...
 
+packages/azim_code/        — verifier-gated self-training
+  corpus_packer.fard       — pack FARD source to JSONL
+  generation_wrapper.fard  — generate + execute + verify candidates
+  accepted_dataset.fard    — filter to accepted corpus
+  code_train_adapter.fard  — train on verified FARD code
+  retraining_manifest.fard — full audit chain document
+  scale_gate.fard          — gate scale decisions on evidence
+
 tests/
-  test_*.fard  (98 files)
+  test_*.fard  (141 files)
 
-out/checkpoints/
-  shard_0.json .. shard_79.json
-
-out/lm_checkpoints/
-  shard_*.json  (LM objective run)
+out/checkpoints/           — classifier run (80 shards)
+out/lm_checkpoints2/       — LM run (62/80 shards)
 ```
 
 -----
@@ -215,8 +206,10 @@ out/lm_checkpoints/
 ```
 fardrun test --program tests/test_lm_objective.fard
 fardrun test --program tests/test_generation_lm.fard
-fardrun test --program tests/test_neural_authority.fard
 fardrun run  --program main_lm.fard --out out/lm_full_run
+fardrun run  --program test_azim_code_corpus_packer.fard --out out/corpus
+fardrun run  --program test_azim_code_train_adapter.fard --out out/code_train
+fardrun run  --program test_azim_code_scale_gate.fard --out out/scale_gate
 fardrun run  --program main.fard --out out/main_run
 ```
 
