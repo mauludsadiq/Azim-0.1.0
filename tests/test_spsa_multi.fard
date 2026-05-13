@@ -1,0 +1,49 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/spsa_multi") as spsa
+
+fn simple_loss(data) {
+  list.fold(data, 0.0, fn(acc, x) { acc + x * x })
+}
+
+test "rotating_dir returns list" {
+  type.of(spsa.rotating_dir([1.0, 2.0, 3.0], 0, 1)) == "list"
+}
+
+test "rotating_dir values are +/-1" {
+  let d = spsa.rotating_dir([1.0, 2.0, 3.0], 0, 1) in
+  list.all(d, fn(x) { x == 1.0 || x == -1.0 })
+}
+
+test "multi_direction_grad returns list" {
+  let data = [1.0, 2.0, 3.0] in
+  let dirs = [spsa.rotating_dir(data, 0, 1), spsa.rotating_dir(data, 1, 2)] in
+  let lp = [6.0, 7.0] in
+  let lm = [4.0, 5.0] in
+  type.of(spsa.multi_direction_grad(data, dirs, lp, lm, 0.001)) == "list"
+}
+
+test "multi_spsa_step decreases loss on quadratic" {
+  let data = [2.0, 3.0, 4.0] in
+  let result = spsa.multi_spsa_step(data, 0, 3, 0.01, 0.1,
+    fn(W) { simple_loss(W) },
+    fn(d) { d }) in
+  simple_loss(result.data) < simple_loss(data)
+}
+
+test "k=3 gives 3 l_plusses" {
+  let data = [1.0, 2.0, 3.0] in
+  let result = spsa.multi_spsa_step(data, 0, 3, 0.01, 0.1,
+    fn(W) { simple_loss(W) },
+    fn(d) { d }) in
+  list.len(result.l_plusses) == 3
+}
+
+test "different k gives different gradient" {
+  let data = [1.0, 2.0, 3.0] in
+  let r1 = spsa.multi_spsa_step(data, 0, 1, 0.01, 0.1,
+    fn(W) { simple_loss(W) }, fn(d) { d }) in
+  let r3 = spsa.multi_spsa_step(data, 0, 3, 0.01, 0.1,
+    fn(W) { simple_loss(W) }, fn(d) { d }) in
+  list.get(r1.data, 0) != list.get(r3.data, 0)
+}
