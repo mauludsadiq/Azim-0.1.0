@@ -1,0 +1,45 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/train_all_weights") as tw
+import("../packages/azim_trial/spsa_multi") as spsa
+
+let s = tw.init_state
+let ids = [2, 10, 50, 100, 200, 400, 3]
+
+fn loss_fn_U(W_data) {
+  let state = { W_U: { dims: s.W_U.dims, data: W_data, valid: true },
+    WQ: s.WQ, WK: s.WK, WV: s.WV, WO: s.WO,
+    Wg: s.Wg, Wu: s.Wu, Wd: s.Wd,
+    WQ2: s.WQ2, WK2: s.WK2, WV2: s.WV2, WO2: s.WO2,
+    Wg2: s.Wg2, Wu2: s.Wu2, Wd2: s.Wd2 } in
+  tw.nll_state(state, ids, 2)
+}
+
+test "multi spsa step on W_U returns updated data" {
+  let result = spsa.multi_spsa_step(
+    s.W_U.data, 0, 3, 0.0001, 0.001,
+    fn(d) { loss_fn_U(d) },
+    fn(d) { d }
+  ) in
+  list.len(result.data) == list.len(s.W_U.data)
+}
+
+test "multi spsa k=3 loss decreases on W_U" {
+  let result = spsa.multi_spsa_step(
+    s.W_U.data, 0, 3, 0.0001, 0.001,
+    fn(d) { loss_fn_U(d) },
+    fn(d) { d }
+  ) in
+  loss_fn_U(result.data) < loss_fn_U(s.W_U.data)
+}
+
+test "k=3 beats k=1 gradient quality" {
+  let loss_base = loss_fn_U(s.W_U.data) in
+  let r1 = spsa.multi_spsa_step(s.W_U.data, 0, 1, 0.0001, 0.001,
+    fn(d) { loss_fn_U(d) }, fn(d) { d }) in
+  let r3 = spsa.multi_spsa_step(s.W_U.data, 0, 3, 0.0001, 0.001,
+    fn(d) { loss_fn_U(d) }, fn(d) { d }) in
+  let delta1 = loss_base - loss_fn_U(r1.data) in
+  let delta3 = loss_base - loss_fn_U(r3.data) in
+  delta3 > 0.0
+}
