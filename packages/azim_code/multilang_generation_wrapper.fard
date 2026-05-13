@@ -1,0 +1,109 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("tokenizer") as tok
+import("verifier") as verifier
+import("lang_detect") as ld
+
+fn lang_token_id(lang) {
+  if lang == "python" then tok.lang_python_id
+  else if lang == "rust" then tok.lang_rust_id
+  else if lang == "javascript" then tok.lang_js_id
+  else tok.lang_fard_id
+}
+
+fn ext_for_lang(lang) {
+  if lang == "python" then ".py"
+  else if lang == "rust" then ".rs"
+  else if lang == "javascript" then ".js"
+  else ".fard"
+}
+
+fn deterministic_completion_lang(prompt, lang, index) {
+  if lang == "python" then
+    if str.contains(prompt, "add") then "def add(a, b):\n    return a + b\n"
+    else if str.contains(prompt, "sort") then "def sort_list(xs):\n    return sorted(xs)\n"
+    else "def main():\n    return 42\n"
+  else if lang == "rust" then
+    if str.contains(prompt, "add") then "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
+    else "pub fn main() -> i32 {\n    42\n}\n"
+  else if lang == "javascript" then
+    if str.contains(prompt, "add") then "function add(a, b) {\n  return a + b;\n}\n"
+    else "function main() {\n  return 42;\n}\n"
+  else
+    if index % 2 == 0 then "{ ok: true, value: 42 }"
+    else "fn main() {\n  42\n}\n{ ok: true, value: main() }"
+}
+
+fn generate_one_lang(prompt, lang, index, candidate_dir, run_dir) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+  let source = deterministic_completion_lang(prompt, lang, index) in
+  let lang_id = lang_token_id(lang) in
+  let tokenized = tok.tokenize_with_receipt(source) in
+  let tokens_with_lang = list.concat([[lang_id], tokenized.tokens]) in
+  let ext = ext_for_lang(lang) in
+  let cpath = path.join(candidate_dir, str.concat(["candidate_", str.from(index), ext])) in
+  let rout = path.join(run_dir, str.concat(["candidate_", str.from(index), "_run"])) in
+  let verified = verifier.verify_candidate_lang(source, cpath, rout, lang) in
+  let record = {
+    index: index,
+    lang: lang,
+    lang_token_id: lang_id,
+    prompt: prompt,
+    source: source,
+    tokens: tokens_with_lang,
+    token_count: list.len(tokens_with_lang),
+    candidate_path: cpath,
+    run_out: rout,
+    verification: verified,
+    accepted: verified.result.accepted,
+    class: verified.result.class
+  } in
+  {
+    result: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn generate_batch_multilang(prompts, langs, candidate_dir, run_dir) {
+  let n = list.len(prompts) in
+  let records = list.map(list.range(0, n), fn(i) {
+    let prompt = list.get(prompts, i) in
+    let lang = list.get(langs, i % list.len(langs)) in
+    generate_one_lang(prompt, lang, i, candidate_dir, run_dir)
+  }) in
+  let accepted = list.filter(records, fn(r) { r.result.accepted }) in
+  let rejected = list.filter(records, fn(r) { !r.result.accepted }) in
+  let lang_counts = list.map(langs, fn(l) {
+    let count = list.len(list.filter(accepted, fn(r) { r.result.lang == l })) in
+    { lang: l, count: count }
+  }) in
+  let manifest = {
+    component: "azim_code.multilang_generation_wrapper",
+    version: "1.0.0",
+    candidate_dir: candidate_dir,
+    run_dir: run_dir,
+    total: list.len(records),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    lang_counts: lang_counts,
+    records: records
+  } in
+  let manifest_text = json.canonicalize(manifest) in
+  let _m = fs.write_text(path.join(candidate_dir, "multilang_manifest.json"), manifest_text) in
+  {
+    ok: true,
+    total: list.len(records),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    lang_counts: lang_counts,
+    manifest_sha256: hash.sha256_text(manifest_text),
+    records: records
+  }
+}
+
+export { lang_token_id, ext_for_lang, deterministic_completion_lang, generate_one_lang, generate_batch_multilang }

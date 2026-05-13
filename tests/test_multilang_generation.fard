@@ -1,0 +1,47 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_code/multilang_generation_wrapper") as mg
+
+test "lang_token_id python" {
+  mg.lang_token_id("python") == 5
+}
+
+test "lang_token_id rust" {
+  mg.lang_token_id("rust") == 6
+}
+
+test "ext_for_lang python" {
+  mg.ext_for_lang("python") == ".py"
+}
+
+test "deterministic_completion python" {
+  let c = mg.deterministic_completion_lang("add two numbers", "python", 0) in
+  str.contains(c, "def")
+}
+
+test "deterministic_completion rust" {
+  let c = mg.deterministic_completion_lang("add two numbers", "rust", 0) in
+  str.contains(c, "fn")
+}
+
+test "generate_one_lang returns record" {
+  let r = mg.generate_one_lang("add", "python", 0,
+    "out/test_multilang_candidates",
+    "out/test_multilang_runs") in
+  type.of(r) == "record"
+}
+
+test "generate_one_lang python accepted" {
+  let r = mg.generate_one_lang("add", "python", 1,
+    "out/test_multilang_candidates",
+    "out/test_multilang_runs") in
+  r.result.accepted
+}
+
+test "generate_one_lang has lang token" {
+  let r = mg.generate_one_lang("add", "python", 2,
+    "out/test_multilang_candidates",
+    "out/test_multilang_runs") in
+  list.get(r.result.tokens, 0) == 5
+}
