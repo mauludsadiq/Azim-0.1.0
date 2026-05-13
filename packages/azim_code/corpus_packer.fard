@@ -5,6 +5,7 @@ import("std/list") as list
 import("std/json") as json
 import("std/hash") as hash
 import("tokenizer") as tok
+import("lang_detect") as ld
 
 fn has_suffix(s, suffix) {
   str.ends_with(s, suffix)
@@ -26,7 +27,7 @@ fn walk_dir_limited(root, remaining) {
     if skip_path(p) then acc else
     let st = fs.stat(p) in
     if st.is_dir then acc
-    else if has_suffix(p, ".fard") && st.size < 20000 then
+    else if (has_suffix(p, ".fard") || has_suffix(p, ".py") || has_suffix(p, ".rs") || has_suffix(p, ".js")) && st.size < 20000 then
       { files: list.append(acc.files, p), remaining: acc.remaining - 1 }
     else acc
   })
@@ -41,6 +42,7 @@ fn file_record(p) {
   let tr = tok.tokenize_with_receipt(src) in
   {
     kind: "full_file",
+    lang: ld.detect(p),
     path: p,
     source_sha256: hash.sha256_text(src),
     token_count: list.len(tr.tokens),

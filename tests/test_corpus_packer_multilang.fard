@@ -1,0 +1,12 @@
+import("std/list") as list
+import("../packages/azim_code/corpus_packer") as packer
+
+test "file_record includes lang field" {
+  let r = packer.file_record("packages/azim_trial/tokenizer.fard") in
+  r.lang == "fard"
+}
+
+test "pack includes lang in records" {
+  let result = packer.pack("packages/azim_trial", "out/corpus_lang_test", 3) in
+  result.ok
+}
