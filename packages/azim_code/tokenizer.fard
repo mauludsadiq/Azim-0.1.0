@@ -11,14 +11,30 @@ let keyword_tokens = [
   "import", "as", "export", "match", "using",
   "test", "while", "return",
   "true", "false", "null",
-  "artifact", "a", "is", "or"
+  "artifact", "a", "is", "or",
+  "def", "class", "for", "with", "pass", "lambda",
+  "yield", "from", "not", "and", "del", "raise",
+  "try", "except", "finally", "global", "nonlocal",
+  "async", "await", "self",
+  "mut", "pub", "use", "mod", "struct", "enum",
+  "impl", "trait", "where", "Self", "super", "crate",
+  "loop", "break", "continue", "ref", "type",
+  "unsafe", "move", "dyn",
+  "var", "const", "function", "new", "this",
+  "typeof", "instanceof", "void", "delete", "of",
+  "get", "set", "switch", "case", "default",
+  "do", "throw", "catch", "finally",
+  "interface", "extends", "implements", "static",
+  "None", "True", "False"
 ]
 
 let symbol_tokens = [
   "!=", "==", "<=", ">=", "&&", "||", "->", "=>", "|>", "?.", "??", "...",
+  "::", "**", "//", "/*", "*/", "+=", "-=", "*=", "/=", "%=",
+  "&=", "|=", "^=", "<<", ">>", "<<<", ">>>",
   "(", ")", "{", "}", "[", "]", ",", ":", ".",
   "+", "-", "*", "/", "=", "%", "|", "<", ">",
-  "?", "!"
+  "?", "!", "&", "^", "~", "@", "#", ";"
 ]
 
 let class_tokens = [
@@ -32,15 +48,6 @@ let pad_id = 0
 let unk_id = 1
 let bos_id = 2
 let eos_id = 3
-let ident_id = 51
-let int_id = 52
-let float_id = 53
-let string_id = 54
-let bt_string_id = 55
-let doc_id = 56
-let comment_id = 57
-let nl_id = 58
-let ws_id = 59
 
 let vocab_sha256 = hash.sha256_text(json.canonicalize(vocabulary))
 
@@ -84,14 +91,6 @@ fn slice_chars(chars, start, end) {
   str.join(list.take(list.drop(chars, start), end - start), "")
 }
 
-fn is_keyword(w) {
-  rec.has(vocab_map(), w) &&
-  !str.starts_with(w, "<") &&
-  w != "!=" && w != "==" && w != "<=" && w != ">=" &&
-  w != "&&" && w != "||" && w != "->" && w != "=>" &&
-  w != "|>" && w != "?." && w != "??" && w != "..."
-}
-
 fn scan_while(chars, start, pred_name) {
   let n = list.len(chars) in
   let init = { i: start, done: false } in
@@ -106,10 +105,20 @@ fn scan_while(chars, start, pred_name) {
   r.value.i
 }
 
-fn scan_comment(chars, start) {
+fn scan_to_eol(chars, start) {
   let n = list.len(chars) in
   let r = while { i: start, done: false } fn(s) { s.i < n && !s.done } fn(s) {
     if peek(chars, s.i) == "\n" then { i: s.i, done: true }
+    else { i: s.i + 1, done: false }
+  } in
+  r.value.i
+}
+
+fn scan_block_comment(chars, start) {
+  let n = list.len(chars) in
+  let r = while { i: start + 2, done: false } fn(s) { s.i < n && !s.done } fn(s) {
+    if peek(chars, s.i) == "*" && peek(chars, s.i + 1) == "/" then
+      { i: s.i + 2, done: true }
     else { i: s.i + 1, done: false }
   } in
   r.value.i
@@ -122,30 +131,18 @@ fn scan_string(chars, start, quote) {
     if quote == "`" then
       if c == "`" then { i: s.i + 1, esc: false, done: true }
       else { i: s.i + 1, esc: false, done: false }
-    else if s.esc then
-      { i: s.i + 1, esc: false, done: false }
-    else if c == "\\" then
-      { i: s.i + 1, esc: true, done: false }
-    else if c == "\"" then
-      { i: s.i + 1, esc: false, done: true }
-    else
-      { i: s.i + 1, esc: false, done: false }
+    else if s.esc then { i: s.i + 1, esc: false, done: false }
+    else if c == "\\" then { i: s.i + 1, esc: true, done: false }
+    else if c == quote then { i: s.i + 1, esc: false, done: true }
+    else { i: s.i + 1, esc: false, done: false }
   } in
   r.value.i
 }
 
 fn scan_number(chars, start) {
-  let n = list.len(chars) in
   let int_end = scan_while(chars, start, "digit") in
   if peek(chars, int_end) == "." && is_digit(peek(chars, int_end + 1)) then
-    let frac_end = scan_while(chars, int_end + 1, "digit") in
-    let e = peek(chars, frac_end) in
-    if e == "e" || e == "E" then
-      let sign_pos = frac_end + 1 in
-      let digit_pos = if peek(chars, sign_pos) == "+" || peek(chars, sign_pos) == "-" then sign_pos + 1 else sign_pos in
-      if is_digit(peek(chars, digit_pos)) then { end: scan_while(chars, digit_pos, "digit"), kind: "float" }
-      else { end: frac_end, kind: "float" }
-    else { end: frac_end, kind: "float" }
+    { end: scan_while(chars, int_end + 1, "digit"), kind: "float" }
   else { end: int_end, kind: "int" }
 }
 
@@ -165,51 +162,75 @@ fn tokenize_no_special_with_pieces(src) {
     let c3 = peek(chars, s.i + 2) in
 
     if c == "\n" then
-      let e = emit_token(s, "<NL>", "\n", s.i, s.i + 1) in { i: s.i + 1, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, "<NL>", "\n", s.i, s.i + 1) in
+      { i: s.i + 1, ids: e.ids, pieces: e.pieces }
 
     else if c == " " || c == "\t" then
       let end = while { j: s.i } fn(w) { w.j < n && (peek(chars, w.j) == " " || peek(chars, w.j) == "\t") } fn(w) { { j: w.j + 1 } } in
       let j = end.value.j in
-      let e = emit_token(s, "<WS>", slice_chars(chars, s.i, j), s.i, j) in { i: j, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, "<WS>", slice_chars(chars, s.i, j), s.i, j) in
+      { i: j, ids: e.ids, pieces: e.pieces }
 
     else if c == "/" && c2 == "/" && c3 == "/" then
-      let j = scan_comment(chars, s.i) in
-      let e = emit_token(s, "<DOC>", slice_chars(chars, s.i, j), s.i, j) in { i: j, ids: e.ids, pieces: e.pieces }
+      let j = scan_to_eol(chars, s.i) in
+      let e = emit_token(s, "<DOC>", slice_chars(chars, s.i, j), s.i, j) in
+      { i: j, ids: e.ids, pieces: e.pieces }
+
+    else if c == "/" && c2 == "*" then
+      let j = scan_block_comment(chars, s.i) in
+      let e = emit_token(s, "<COMMENT>", slice_chars(chars, s.i, j), s.i, j) in
+      { i: j, ids: e.ids, pieces: e.pieces }
 
     else if (c == "/" && c2 == "/") || c == "#" then
-      let j = scan_comment(chars, s.i) in
-      let e = emit_token(s, "<COMMENT>", slice_chars(chars, s.i, j), s.i, j) in { i: j, ids: e.ids, pieces: e.pieces }
+      let j = scan_to_eol(chars, s.i) in
+      let e = emit_token(s, "<COMMENT>", slice_chars(chars, s.i, j), s.i, j) in
+      { i: j, ids: e.ids, pieces: e.pieces }
 
-    else if c == "\"" then
-      let j = scan_string(chars, s.i, "\"") in
-      let e = emit_token(s, "<STRING>", slice_chars(chars, s.i, j), s.i, j) in { i: j, ids: e.ids, pieces: e.pieces }
+    else if c == "\"" || c == "'" then
+      let j = scan_string(chars, s.i, c) in
+      let e = emit_token(s, "<STRING>", slice_chars(chars, s.i, j), s.i, j) in
+      { i: j, ids: e.ids, pieces: e.pieces }
 
     else if c == "`" then
       let j = scan_string(chars, s.i, "`") in
-      let e = emit_token(s, "<BT_STRING>", slice_chars(chars, s.i, j), s.i, j) in { i: j, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, "<BT_STRING>", slice_chars(chars, s.i, j), s.i, j) in
+      { i: j, ids: e.ids, pieces: e.pieces }
 
     else if c == "." && c2 == "." && c3 == "." then
-      let e = emit_token(s, "...", "...", s.i, s.i + 3) in { i: s.i + 3, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, "...", "...", s.i, s.i + 3) in
+      { i: s.i + 3, ids: e.ids, pieces: e.pieces }
+
+    else if c == "<" && c2 == "<" && c3 == "<" then
+      let e = emit_token(s, "<<<", "<<<", s.i, s.i + 3) in
+      { i: s.i + 3, ids: e.ids, pieces: e.pieces }
+
+    else if c == ">" && c2 == ">" && c3 == ">" then
+      let e = emit_token(s, ">>>", ">>>", s.i, s.i + 3) in
+      { i: s.i + 3, ids: e.ids, pieces: e.pieces }
 
     else if token_id(str.concat([c, c2])) != unk_id then
       let op = str.concat([c, c2]) in
-      let e = emit_token(s, op, op, s.i, s.i + 2) in { i: s.i + 2, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, op, op, s.i, s.i + 2) in
+      { i: s.i + 2, ids: e.ids, pieces: e.pieces }
 
     else if is_alpha(c) then
       let j = scan_while(chars, s.i, "ident") in
       let raw = slice_chars(chars, s.i, j) in
       let token = if rec.has(vocab_map(), raw) then raw else "<IDENT>" in
-      let e = emit_token(s, token, raw, s.i, j) in { i: j, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, token, raw, s.i, j) in
+      { i: j, ids: e.ids, pieces: e.pieces }
 
     else if is_digit(c) then
       let nr = scan_number(chars, s.i) in
       let token = if nr.kind == "float" then "<FLOAT>" else "<INT>" in
-      let e = emit_token(s, token, slice_chars(chars, s.i, nr.end), s.i, nr.end) in { i: nr.end, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, token, slice_chars(chars, s.i, nr.end), s.i, nr.end) in
+      { i: nr.end, ids: e.ids, pieces: e.pieces }
 
     else
       let raw = c in
       let token = if token_id(raw) == unk_id then "<UNK>" else raw in
-      let e = emit_token(s, token, raw, s.i, s.i + 1) in { i: s.i + 1, ids: e.ids, pieces: e.pieces }
+      let e = emit_token(s, token, raw, s.i, s.i + 1) in
+      { i: s.i + 1, ids: e.ids, pieces: e.pieces }
   } in
   { ids: r.value.ids, pieces: r.value.pieces }
 }
@@ -244,7 +265,7 @@ fn receipt_for(component, version, input, output_ids, pieces) {
 fn tokenize_with_receipt(src) {
   let r = tokenize_no_special_with_pieces(src) in
   let ids = list.concat([[bos_id], r.ids, [eos_id]]) in
-  let receipt = receipt_for("azim_code.tokenizer", "1.0.0", src, ids, r.pieces) in
+  let receipt = receipt_for("azim_code.tokenizer", "2.0.0", src, ids, r.pieces) in
   { tokens: ids, pieces: r.pieces, receipt: receipt, vocab_sha256: vocab_sha256 }
 }
 

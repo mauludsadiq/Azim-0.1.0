@@ -1,0 +1,29 @@
+import("../packages/azim_code/lang_detect") as ld
+
+test "detects python" {
+  ld.detect("foo/bar.py") == "python"
+}
+
+test "detects rust" {
+  ld.detect("src/main.rs") == "rust"
+}
+
+test "detects javascript" {
+  ld.detect("index.js") == "javascript"
+}
+
+test "detects fard" {
+  ld.detect("packages/azim_trial/tensor.fard") == "fard"
+}
+
+test "detects unknown" {
+  ld.detect("README.md") == "unknown"
+}
+
+test "is_code true for py" {
+  ld.is_code("foo.py")
+}
+
+test "is_code false for md" {
+  ld.is_code("README.md") == false
+}

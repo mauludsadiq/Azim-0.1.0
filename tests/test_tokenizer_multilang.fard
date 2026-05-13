@@ -1,0 +1,43 @@
+import("std/list") as list
+import("../packages/azim_code/tokenizer") as tok
+
+test "vocab size is 155" {
+  tok.vocab_size() == 155
+}
+
+test "python def is keyword" {
+  tok.token_id("def") != tok.unk_id
+}
+
+test "rust struct is keyword" {
+  tok.token_id("struct") != tok.unk_id
+}
+
+test "js const is keyword" {
+  tok.token_id("const") != tok.unk_id
+}
+
+test "python tokenizes correctly" {
+  let r = tok.tokenize_with_receipt("def foo(x):\n    return x + 1") in
+  list.len(r.tokens) > 5
+}
+
+test "rust tokenizes correctly" {
+  let r = tok.tokenize_with_receipt("fn main() { let x: i32 = 42; }") in
+  list.len(r.tokens) > 5
+}
+
+test "js tokenizes correctly" {
+  let r = tok.tokenize_with_receipt("const foo = (x) => x + 1;") in
+  list.len(r.tokens) > 5
+}
+
+test "block comment tokenizes" {
+  let r = tok.tokenize_with_receipt("/* comment */ let x = 1") in
+  list.any(r.pieces, fn(p) { p.token == "<COMMENT>" })
+}
+
+test "hash comment tokenizes" {
+  let r = tok.tokenize_with_receipt("# python comment\nx = 1") in
+  list.any(r.pieces, fn(p) { p.token == "<COMMENT>" })
+}
