@@ -1,0 +1,7 @@
+import("packages/azim_code/verifier") as v
+
+v.execute_candidate_python(
+  "def add(a, b):\n    return a + b\n\nprint(add(20, 22))\n",
+  "out/azim_code_python_execute/candidate.py",
+  "out/azim_code_python_execute/run"
+)
