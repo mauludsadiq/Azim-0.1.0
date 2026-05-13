@@ -1,0 +1,115 @@
+import("std/process") as process
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/json") as json
+import("std/hash") as hash
+
+fn run_python_with_tests(source, tests, candidate_path, test_path, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let _ = fs.write_text(candidate_path, source) in
+  let full_test = str.concat([source, "\n\n", tests]) in
+  let _ = fs.write_text(test_path, full_test) in
+  let r = process.capture("python3", [test_path]) in
+  let record = {
+    component: "azim_code.test_harness",
+    version: "1.0.0",
+    mode: "python_test",
+    lang: "python",
+    candidate_path: candidate_path,
+    test_path: test_path,
+    out_dir: out_dir,
+    ok: r.exit_code == 0,
+    class: if r.exit_code == 0 then "tests_passed" else "tests_failed",
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    stdout_sha256: hash.sha256_text(r.stdout),
+    stderr_sha256: hash.sha256_text(r.stderr),
+    source_sha256: hash.sha256_text(source),
+    tests_sha256: hash.sha256_text(tests)
+  } in
+  let receipt = hash.sha256_text(json.canonicalize(record)) in
+  let _w = fs.write_text(path.join(out_dir, "test_result.json"),
+    json.canonicalize({ result: record, receipt: receipt })) in
+  { result: record, receipt: receipt }
+}
+
+fn run_js_with_tests(source, tests, candidate_path, test_path, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let _ = fs.write_text(candidate_path, source) in
+  let full_test = str.concat([source, "\n\n", tests]) in
+  let _ = fs.write_text(test_path, full_test) in
+  let r = process.capture("node", [test_path]) in
+  let record = {
+    component: "azim_code.test_harness",
+    version: "1.0.0",
+    mode: "js_test",
+    lang: "javascript",
+    candidate_path: candidate_path,
+    test_path: test_path,
+    out_dir: out_dir,
+    ok: r.exit_code == 0,
+    class: if r.exit_code == 0 then "tests_passed" else "tests_failed",
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    stdout_sha256: hash.sha256_text(r.stdout),
+    stderr_sha256: hash.sha256_text(r.stderr),
+    source_sha256: hash.sha256_text(source),
+    tests_sha256: hash.sha256_text(tests)
+  } in
+  let receipt = hash.sha256_text(json.canonicalize(record)) in
+  let _w = fs.write_text(path.join(out_dir, "test_result.json"),
+    json.canonicalize({ result: record, receipt: receipt })) in
+  { result: record, receipt: receipt }
+}
+
+fn run_rust_with_tests(source, tests, candidate_path, test_path, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let full_source = str.concat([source, "\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n", tests, "\n}\n"]) in
+  let _ = fs.write_text(candidate_path, full_source) in
+  let bin_path = path.join(out_dir, "test_bin") in
+  let compile = process.capture("rustc", ["--edition=2021", "--test", candidate_path, "-o", bin_path]) in
+  if compile.exit_code != 0 then
+    let record = {
+      component: "azim_code.test_harness",
+      version: "1.0.0",
+      mode: "rust_test",
+      lang: "rust",
+      ok: false,
+      class: "compile_error",
+      exit_code: compile.exit_code,
+      stdout: compile.stdout,
+      stderr: compile.stderr,
+      stdout_sha256: hash.sha256_text(compile.stdout),
+      stderr_sha256: hash.sha256_text(compile.stderr),
+      source_sha256: hash.sha256_text(source),
+      tests_sha256: hash.sha256_text(tests)
+    } in
+    let receipt = hash.sha256_text(json.canonicalize(record)) in
+    { result: record, receipt: receipt }
+  else
+    let run = process.capture(bin_path, []) in
+    let record = {
+      component: "azim_code.test_harness",
+      version: "1.0.0",
+      mode: "rust_test",
+      lang: "rust",
+      ok: run.exit_code == 0,
+      class: if run.exit_code == 0 then "tests_passed" else "tests_failed",
+      exit_code: run.exit_code,
+      stdout: run.stdout,
+      stderr: run.stderr,
+      stdout_sha256: hash.sha256_text(run.stdout),
+      stderr_sha256: hash.sha256_text(run.stderr),
+      source_sha256: hash.sha256_text(source),
+      tests_sha256: hash.sha256_text(tests)
+    } in
+    let receipt = hash.sha256_text(json.canonicalize(record)) in
+    let _w = fs.write_text(path.join(out_dir, "test_result.json"),
+      json.canonicalize({ result: record, receipt: receipt })) in
+    { result: record, receipt: receipt }
+}
+
+export { run_python_with_tests, run_js_with_tests, run_rust_with_tests }

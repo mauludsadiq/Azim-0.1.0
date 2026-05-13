@@ -1,0 +1,46 @@
+import("std/type") as type
+import("../packages/azim_code/test_harness") as th
+
+test "python tests pass" {
+  let r = th.run_python_with_tests(
+    "def add(a, b):\n    return a + b\n",
+    "assert add(2, 3) == 5\nassert add(0, 0) == 0\nprint('ok')\n",
+    "out/test_harness/candidate.py",
+    "out/test_harness/test_candidate.py",
+    "out/test_harness/python"
+  ) in
+  r.result.ok
+}
+
+test "python tests fail on wrong code" {
+  let r = th.run_python_with_tests(
+    "def add(a, b):\n    return a - b\n",
+    "assert add(2, 3) == 5\nprint('ok')\n",
+    "out/test_harness/candidate_bad.py",
+    "out/test_harness/test_candidate_bad.py",
+    "out/test_harness/python_bad"
+  ) in
+  r.result.ok == false
+}
+
+test "js tests pass" {
+  let r = th.run_js_with_tests(
+    "function add(a, b) { return a + b; }\n",
+    "console.assert(add(2, 3) === 5);\nconsole.assert(add(0, 0) === 0);\nconsole.log('ok');\n",
+    "out/test_harness/candidate.js",
+    "out/test_harness/test_candidate.js",
+    "out/test_harness/js"
+  ) in
+  r.result.ok
+}
+
+test "receipt is sha256" {
+  let r = th.run_python_with_tests(
+    "def add(a, b):\n    return a + b\n",
+    "assert add(1, 1) == 2\nprint('ok')\n",
+    "out/test_harness/candidate2.py",
+    "out/test_harness/test_candidate2.py",
+    "out/test_harness/python2"
+  ) in
+  type.of(r.receipt) == "text"
+}
