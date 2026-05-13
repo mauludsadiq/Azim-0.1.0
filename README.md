@@ -2,7 +2,7 @@
 
 Deterministic distributed AI training on FARD.
 
-Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 12,885 lines of code.
+Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 13,014 lines of code.
 
 -----
 
@@ -29,8 +29,6 @@ Below random: 47/80 shards
 Trend slope:  -0.0137/shard
 ```
 
-Generation evaluation across 9 checkpoints confirmed. Outputs change across training. Semantic tokens (liquid, fire, hot, cold, combustion) emerge with top-k sampling.
-
 Azim-Code self-training loop. 5 iterations completed.
 
 ```
@@ -43,27 +41,60 @@ Gate:    PASS every iteration
 
 ## Status
 
-|Milestone                                                 |Status|
-|----------------------------------------------------------|------|
-|Deterministic runtime (FARD)                              |done  |
-|Cryptographic receipt chain                               |done  |
-|Real gradient descent (SPSA)                              |done  |
-|Full OWT training run (classifier)                        |done  |
-|Neural path authoritative                                 |done  |
-|Next-token prediction + generation                        |done  |
-|linalg native ops (28x speedup)                           |done  |
-|Structural tokenizer (66 tokens)                          |done  |
-|BPE tokenizer (500 merges, vocab 600)                     |done  |
-|Verifier-gated self-training loop                         |done  |
-|Scale gate                                                |done  |
-|LM run on OWT (80 shards)                                 |done  |
-|Architecture expansion (d_model=32, n_layers=2)           |done  |
-|Blockwise SPSA — all weights simultaneously               |done  |
-|Multi-direction SPSA (K directions, averaged gradient)    |done  |
-|Generation evaluation suite                               |done  |
-|Deterministic samplers (greedy, top-k, top-p, temperature)|done  |
-|Product interface (CLI)                                   |next  |
-|Train at scale (cloud GPU)                                |next  |
+|Milestone                                      |Status|
+|-----------------------------------------------|------|
+|Deterministic runtime (FARD)                   |done  |
+|Cryptographic receipt chain                    |done  |
+|Real gradient descent (SPSA)                   |done  |
+|Full OWT training run (classifier)             |done  |
+|Neural path authoritative                      |done  |
+|Next-token prediction + generation             |done  |
+|linalg native ops (28x speedup)                |done  |
+|Structural tokenizer (66 tokens)               |done  |
+|BPE tokenizer (500 merges, vocab 600)          |done  |
+|Verifier-gated self-training loop              |done  |
+|Scale gate                                     |done  |
+|LM run on OWT (80 shards)                      |done  |
+|Architecture expansion (d_model=32, n_layers=2)|done  |
+|Blockwise SPSA — all weights simultaneously    |done  |
+|Multi-direction SPSA                           |done  |
+|Generation evaluation suite                    |done  |
+|Deterministic samplers (greedy, top-k, top-p)  |done  |
+|Product interface (CLI)                        |done  |
+|Public benchmark pack                          |next  |
+|Train at scale (cloud GPU)                     |next  |
+
+-----
+
+## CLI
+
+```
+fardrun run --program azim.fard --out <out> -- <command> [options]
+
+generate   Generate text
+           --prompt "the sky is"
+           --checkpoint out/lm_checkpoints2/shard_79.json
+           --mode greedy|topk|topp
+
+inspect    Inspect a checkpoint
+           --checkpoint out/lm_checkpoints2/shard_79.json
+
+verify     Verify a checkpoint receipt
+           --proof out/lm_checkpoints2/shard_79.json
+
+eval       Evaluate generation across checkpoints
+           --checkpoints out/lm_checkpoints2
+
+help       Show usage
+```
+
+Example:
+
+```
+fardrun run --program azim.fard --out out/gen -- generate --prompt "the sky is" --mode topk
+# output: .|JIrliquid@77lIIIOneeds-evidence
+# receipt: sha256:16e6beb2...
+```
 
 -----
 
@@ -81,13 +112,12 @@ Azim trains a language model on real data with a closed verifier-gated self-impr
 
 **Azim-Code Pipeline** — trains on verified source code:
 
-- Packs source files into tokenized training corpus (full or focused)
+- Packs source files into tokenized training corpus
 - Generates code candidates, executes via fardrun
 - Accepts candidates that run and verify receipts
 - Trains on accepted corpus only
 - Full audit chain from source SHA to trained weights
 - Scale gate: loss decrease + verified receipts required
-- 5 iterations complete, step count compounding: 13 → 1,166
 
 -----
 
@@ -105,89 +135,31 @@ heads:      4
 params:     ~50,000
 ```
 
-### Trained Parameters (Blockwise Multi-Direction SPSA)
+### Gradient Method
 
-All weight matrices update simultaneously per step. Each block gets K independent SPSA directions. Gradients averaged across K estimates.
-
-```
-W_U_lm   600×32   19,200 params   LM head
-W_Q/K/V/O  32×32   1,024 each    Attention (layer 1)
-W_Q2/K2/V2/O2      1,024 each    Attention (layer 2)
-W_gate/up  64×32   2,048 each    FFN (layer 1)
-W_down     32×64   2,048 params   FFN down (layer 1)
-```
-
------
-
-## Generation Modes
-
-**Greedy** — always picks argmax. Deterministic. Tends to collapse on dominant token.
-
-**Top-k** — sample from k highest probability tokens. Temperature controls sharpness. Deterministic via hash-derived seed.
-
-**Top-p (nucleus)** — sample from smallest set of tokens summing to probability p. Deterministic via hash-derived seed.
-
-Generation evaluation across checkpoints (shard 0 vs shard 79, same prompt):
-
-```
-Shard  0: R\WeR\WeR          (random noise — untrained)
-Shard 30: RSgreencolorRS     (semantic tokens emerging)
-Shard 79 top-k: liquid hot combustion needs-evidence
-```
+Blockwise multi-direction SPSA. K directions per weight matrix per step. Gradients averaged across K estimates. All deterministic. All receipted. Native linalg — 28x speedup.
 
 -----
 
 ## Tokenizers
 
-**azim_trial/tokenizer.fard** — 129-token character-level. Used for initial training runs.
+**azim_trial/tokenizer.fard** — 129-token character-level.
 
-**azim_code/tokenizer.fard** — 66-token structural tokenizer. Language-agnostic. Works on FARD, Python, JavaScript, Rust, Go. Every tokenization receipted.
+**azim_code/tokenizer.fard** — 66-token structural tokenizer. Language-agnostic. Works on FARD, Python, JavaScript, Rust, Go.
 
-**azim_trial/bpe_train.fard + bpe_encode.fard** — Learned BPE. 500 merges on real OpenWebText. 600-token vocabulary. Real English subwords: th, in, er, the, ing, and.
+**azim_trial/bpe_train.fard + bpe_encode.fard** — Learned BPE. 500 merges. 600-token vocabulary. Real English subwords.
 
 -----
 
 ## Receipts
 
-Every computation emits a SHA-256 receipt over canonical JSON:
-
-```
-receipt = sha256(canonicalize({
-  component: "...",
-  version:   "...",
-  output:    <actual computed output>
-}))
-```
-
-Receipts chain across steps into a final audit proof. Replay-verifiable.
+Every computation emits a SHA-256 receipt over canonical JSON. Receipts chain across steps into a final audit proof. Replay-verifiable.
 
 -----
 
 ## Test Coverage
 
-164 test files. 0 failures.
-
-|Area                            |Tests|
-|--------------------------------|-----|
-|Tensor core + linalg            |20   |
-|Tokenizers (trial + code + BPE) |24   |
-|Attention + FFN                 |10   |
-|Loss + Gradients                |14   |
-|RSSM (fixed + learned)          |18   |
-|Distributed scan                |12   |
-|Validator + backpressure        |14   |
-|Receipt + audit chain           |20   |
-|Training run + manifest         |18   |
-|Phase contracts (6, 7, 8)       |29   |
-|OWT loader + training           |8    |
-|LM objective + generation       |18   |
-|Architecture d_model=32         |12   |
-|Blockwise + multi-direction SPSA|17   |
-|Generation evaluation           |6    |
-|Deterministic samplers          |9    |
-|Azim-Code pipeline              |9    |
-|Neural authority                |6    |
-|Integration + other             |294  |
+165 test files. 0 failures.
 
 -----
 
@@ -206,12 +178,11 @@ packages/azim_trial/
   generation_eval.fard     — evaluation across checkpoints
   bpe_train.fard           — BPE merge rule learner
   bpe_encode.fard          — BPE encoder/decoder
-  ...
 
 packages/azim_code/
   tokenizer.fard           — 66-token structural tokenizer
   corpus_packer.fard       — pack source files to JSONL
-  focused_corpus_packer.fard — pack azim_trial only (higher quality)
+  focused_corpus_packer.fard — pack azim_trial only
   generation_wrapper.fard  — generate + execute + verify
   accepted_dataset.fard    — filter to accepted corpus
   code_train_adapter.fard  — train on verified code
@@ -219,27 +190,16 @@ packages/azim_code/
   scale_gate.fard          — gate scale decisions on evidence
   loop_run.fard            — orchestrate full self-training loop
 
+azim.fard                  — CLI entrypoint
+main_lm.fard               — OWT training run entrypoint
+
 tests/
-  test_*.fard  (164 files)
+  test_*.fard  (165 files)
 
 out/checkpoints/           — classifier run (80 shards)
 out/lm_checkpoints2/       — LM run (80 shards)
 out/bpe/                   — BPE manifest
 out/eval/                  — generation evaluation results
-```
-
------
-
-## Running
-
-```
-fardrun test --program tests/test_samplers.fard
-fardrun test --program tests/test_generation_eval.fard
-fardrun test --program tests/test_train_all_weights.fard
-fardrun test --program tests/test_spsa_multi.fard
-fardrun run  --program run_generation_eval.fard --out out/eval
-fardrun run  --program test_azim_code_loop_run.fard --out out/loop
-fardrun run  --program main_lm.fard --out out/lm_full_run
 ```
 
 -----
