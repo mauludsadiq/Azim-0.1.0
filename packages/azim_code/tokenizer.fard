@@ -4,7 +4,7 @@ import("std/rec") as rec
 import("std/hash") as hash
 import("std/json") as json
 
-let special_tokens = ["<PAD>", "<UNK>", "<BOS>", "<EOS>"]
+let special_tokens = ["<PAD>", "<UNK>", "<BOS>", "<EOS>", "<|LANG_FARD|>", "<|LANG_PYTHON|>", "<|LANG_RUST|>", "<|LANG_JS|>"]
 
 let keyword_tokens = [
   "let", "in", "fn", "if", "then", "else",
@@ -48,6 +48,10 @@ let pad_id = 0
 let unk_id = 1
 let bos_id = 2
 let eos_id = 3
+let lang_fard_id = 4
+let lang_python_id = 5
+let lang_rust_id = 6
+let lang_js_id = 7
 
 let vocab_sha256 = hash.sha256_text(json.canonicalize(vocabulary))
 
@@ -265,12 +269,12 @@ fn receipt_for(component, version, input, output_ids, pieces) {
 fn tokenize_with_receipt(src) {
   let r = tokenize_no_special_with_pieces(src) in
   let ids = list.concat([[bos_id], r.ids, [eos_id]]) in
-  let receipt = receipt_for("azim_code.tokenizer", "2.0.0", src, ids, r.pieces) in
+  let receipt = receipt_for("azim_code.tokenizer", "2.1.0", src, ids, r.pieces) in
   { tokens: ids, pieces: r.pieces, receipt: receipt, vocab_sha256: vocab_sha256 }
 }
 
 export {
-  vocabulary, pad_id, unk_id, bos_id, eos_id, vocab_sha256,
+  vocabulary, pad_id, unk_id, bos_id, eos_id, lang_fard_id, lang_python_id, lang_rust_id, lang_js_id, vocab_sha256,
   vocab_size, vocab_map, token_id, token_at,
   tokenize_no_special_with_pieces, tokenize_no_special, tokenize,
   detokenize_ids, detokenize, receipt_for, tokenize_with_receipt

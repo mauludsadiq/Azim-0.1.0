@@ -6,6 +6,7 @@ import("std/json") as json
 import("std/hash") as hash
 import("tokenizer") as tok
 import("lang_detect") as ld
+import("tokenizer") as tok2
 
 fn has_suffix(s, suffix) {
   str.ends_with(s, suffix)
@@ -40,13 +41,21 @@ fn walk_dir(root) {
 fn file_record(p) {
   let src = fs.read_text(p) in
   let tr = tok.tokenize_with_receipt(src) in
+  let lang = ld.detect(p) in
+  let lang_token_id =
+    if lang == "python" then tok2.lang_python_id
+    else if lang == "rust" then tok2.lang_rust_id
+    else if lang == "javascript" then tok2.lang_js_id
+    else tok2.lang_fard_id in
+  let tokens_with_lang = list.concat([[lang_token_id], tr.tokens]) in
   {
     kind: "full_file",
-    lang: ld.detect(p),
+    lang: lang,
+    lang_token_id: lang_token_id,
     path: p,
     source_sha256: hash.sha256_text(src),
-    token_count: list.len(tr.tokens),
-    tokens: tr.tokens,
+    token_count: list.len(tokens_with_lang),
+    tokens: tokens_with_lang,
     tokenizer_receipt: tr.receipt
   }
 }

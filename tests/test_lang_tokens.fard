@@ -1,0 +1,33 @@
+import("std/list") as list
+import("../packages/azim_code/tokenizer") as tok
+
+test "vocab size is 159" {
+  tok.vocab_size() == 159
+}
+
+test "lang_fard token exists" {
+  tok.token_id("<|LANG_FARD|>") == tok.lang_fard_id
+}
+
+test "lang_python token exists" {
+  tok.token_id("<|LANG_PYTHON|>") == tok.lang_python_id
+}
+
+test "lang_rust token exists" {
+  tok.token_id("<|LANG_RUST|>") == tok.lang_rust_id
+}
+
+test "lang_js token exists" {
+  tok.token_id("<|LANG_JS|>") == tok.lang_js_id
+}
+
+test "prepend lang token to sequence" {
+  let ids = tok.tokenize("def foo(): pass") in
+  let with_lang = list.concat([[tok.lang_python_id], ids]) in
+  list.get(with_lang, 0) == tok.lang_python_id
+}
+
+test "lang token in detokenize" {
+  let tok_str = tok.token_at(tok.lang_rust_id) in
+  tok_str == "<|LANG_RUST|>"
+}
