@@ -1,0 +1,37 @@
+import("packages/azim_code/verifier") as v
+
+let fard = v.verify_candidate_lang(
+  "{ ok: true, value: 42 }",
+  "out/azim_code_multilang_all/candidate.fard",
+  "out/azim_code_multilang_all/fard_run",
+  "fard"
+) in
+
+let py = v.verify_candidate_lang(
+  "def add(a, b):\n    return a + b\n",
+  "out/azim_code_multilang_all/candidate.py",
+  "out/azim_code_multilang_all/python_run",
+  "python"
+) in
+
+let rust = v.verify_candidate_lang(
+  "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n",
+  "out/azim_code_multilang_all/candidate.rs",
+  "out/azim_code_multilang_all/rust_run",
+  "rust"
+) in
+
+let js = v.verify_candidate_lang(
+  "function add(a, b) {\n  return a + b;\n}\n",
+  "out/azim_code_multilang_all/candidate.js",
+  "out/azim_code_multilang_all/js_run",
+  "javascript"
+) in
+
+{
+  ok: fard.result.accepted && py.result.accepted && rust.result.accepted && js.result.accepted,
+  fard: { accepted: fard.result.accepted, class: fard.result.class, receipt: fard.receipt },
+  python: { accepted: py.result.accepted, class: py.result.class, receipt: py.receipt },
+  rust: { accepted: rust.result.accepted, class: rust.result.class, receipt: rust.receipt },
+  javascript: { accepted: js.result.accepted, class: js.result.class, receipt: js.receipt }
+}
