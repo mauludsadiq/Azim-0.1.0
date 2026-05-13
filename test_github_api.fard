@@ -1,0 +1,5 @@
+import("std/http") as http
+import("std/json") as json
+
+let response = http.get("https://api.github.com/repos/torvalds/linux/contents/README")
+{ status: response.status }

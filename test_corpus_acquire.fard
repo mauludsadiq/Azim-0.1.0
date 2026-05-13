@@ -1,0 +1,3 @@
+import("packages/azim_code/corpus_acquire") as ca
+
+ca.acquire_and_pack("kennethreitz", "requests", 5, "out/corpus_acquire_test")

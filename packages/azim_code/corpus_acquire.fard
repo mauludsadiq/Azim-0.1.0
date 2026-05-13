@@ -1,0 +1,172 @@
+import("std/http") as http
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("std/path") as path
+import("std/process") as process
+import("tokenizer") as tok
+import("lang_detect") as ld
+import("verifier") as verifier
+
+fn github_search(lang, min_stars, per_page) {
+  let url = str.concat([
+    "https://api.github.com/search/repositories?q=language:",
+    lang, "+stars:>", str.from(min_stars),
+    "&sort=stars&per_page=", str.from(per_page)
+  ]) in
+  let r = http.get(url) in
+  if r.status != 200 then { ok: false, items: [], total: 0 }
+  else
+    let d = json.decode(r.body) in
+    { ok: true, items: d.items, total: d.total_count }
+}
+
+fn github_contents(owner, repo, file_path) {
+  let url = str.concat([
+    "https://api.github.com/repos/", owner, "/", repo,
+    "/contents/", file_path
+  ]) in
+  let r = http.get(url) in
+  if r.status != 200 then { ok: false, content: "", sha: "" }
+  else
+    let d = json.decode(r.body) in
+    { ok: true, content: d.content, sha: d.sha, size: d.size }
+}
+
+fn github_tree(owner, repo) {
+  let url = str.concat([
+    "https://api.github.com/repos/", owner, "/", repo,
+    "/git/trees/HEAD?recursive=1"
+  ]) in
+  let r = http.get(url) in
+  if r.status != 200 then { ok: false, files: [] }
+  else
+    let d = json.decode(r.body) in
+    let files = list.filter(d.tree, fn(f) {
+      f.type == "blob" &&
+      (str.ends_with(f.path, ".py") ||
+       str.ends_with(f.path, ".rs") ||
+       str.ends_with(f.path, ".js")) &&
+      f.size < 10000
+    }) in
+    { ok: true, files: files }
+}
+
+fn fetch_raw(owner, repo, file_path) {
+  let url = str.concat([
+    "https://raw.githubusercontent.com/", owner, "/", repo,
+    "/HEAD/", file_path
+  ]) in
+  let r = http.get(url) in
+  { ok: r.status == 200, body: r.body, status: r.status }
+}
+
+fn verify_file(source, lang, candidate_dir, run_dir, index) {
+  let ext = if lang == "python" then ".py"
+    else if lang == "rust" then ".rs"
+    else ".js" in
+  let cpath = path.join(candidate_dir, str.concat([str.from(index), ext])) in
+  let rdir = path.join(run_dir, str.from(index)) in
+  verifier.execute_candidate_lang(source, cpath, rdir, lang)
+}
+
+fn acquire_from_repo(owner, repo, max_files, candidate_dir, run_dir) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+  let tree = github_tree(owner, repo) in
+  if !tree.ok then { ok: false, accepted: [], rejected: [] } else
+  let files = list.take(tree.files, max_files) in
+  let results = list.map(list.range(0, list.len(files)), fn(i) {
+    let f = list.get(files, i) in
+    let lang = ld.detect(f.path) in
+    let fetched = fetch_raw(owner, repo, f.path) in
+    if !fetched.ok then { accepted: false, path: f.path, lang: lang, reason: "fetch_failed" }
+    else
+      let verified = verify_file(fetched.body, lang, candidate_dir, run_dir, i) in
+      if verified.result.ok then {
+        accepted: true,
+        path: f.path,
+        lang: lang,
+        source: fetched.body,
+        source_sha256: hash.sha256_text(fetched.body),
+        token_count: list.len(tok.tokenize(fetched.body)),
+        receipt: verified.receipt
+      }
+      else { accepted: false, path: f.path, lang: lang, reason: verified.result.class }
+  }) in
+  let accepted = list.filter(results, fn(r) { r.accepted }) in
+  let rejected = list.filter(results, fn(r) { !r.accepted }) in
+  {
+    ok: true,
+    owner: owner,
+    repo: repo,
+    total: list.len(files),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    accepted: accepted,
+    rejected: rejected,
+    receipt: hash.sha256_text(json.canonicalize({
+      component: "azim_code.corpus_acquire",
+      version: "1.0.0",
+      owner: owner,
+      repo: repo,
+      accepted_count: list.len(accepted)
+    }))
+  }
+}
+
+fn acquire_and_pack(owner, repo, max_files, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let candidate_dir = path.join(out_dir, "candidates") in
+  let run_dir = path.join(out_dir, "runs") in
+  let result = acquire_from_repo(owner, repo, max_files, candidate_dir, run_dir) in
+  let records = list.map(result.accepted, fn(r) {
+    let lang_id =
+      if r.lang == "python" then tok.lang_python_id
+      else if r.lang == "rust" then tok.lang_rust_id
+      else if r.lang == "javascript" then tok.lang_js_id
+      else tok.lang_fard_id in
+    let tokens = tok.tokenize(r.source) in
+    {
+      kind: "github_file",
+      lang: r.lang,
+      lang_token_id: lang_id,
+      owner: owner,
+      repo: repo,
+      path: r.path,
+      source_sha256: r.source_sha256,
+      token_count: list.len(tokens) + 1,
+      tokens: list.concat([[lang_id], tokens]),
+      acquisition_receipt: r.receipt
+    }
+  }) in
+  let shard_path = path.join(out_dir, "acquired_shard.jsonl") in
+  let payload = str.join(list.map(records, fn(r) { json.canonicalize(r) }), "\n") in
+  let _ = fs.write_text(shard_path, payload) in
+  let manifest = {
+    component: "azim_code.corpus_acquire",
+    version: "1.0.0",
+    owner: owner,
+    repo: repo,
+    total_fetched: result.total,
+    accepted_count: result.accepted_count,
+    rejected_count: result.rejected_count,
+    shard_path: shard_path,
+    shard_sha256: hash.sha256_text(payload),
+    total_tokens: list.fold(records, 0, fn(a, r) { a + r.token_count })
+  } in
+  let manifest_text = json.canonicalize(manifest) in
+  let _ = fs.write_text(path.join(out_dir, "manifest.json"), manifest_text) in
+  {
+    ok: true,
+    accepted_count: result.accepted_count,
+    rejected_count: result.rejected_count,
+    total_tokens: manifest.total_tokens,
+    shard_path: shard_path,
+    receipt: hash.sha256_text(manifest_text)
+  }
+}
+
+export { github_search, github_tree, fetch_raw, verify_file, acquire_from_repo, acquire_and_pack }

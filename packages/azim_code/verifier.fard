@@ -336,4 +336,12 @@ fn execute_candidate_fard(source, candidate_path, out_dir) {
   { result: record, receipt: receipt }
 }
 
-export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate, run_python_check, run_rust_check, run_js_check, verify_candidate_lang, execute_candidate_python, execute_candidate_js, execute_candidate_rust, execute_candidate_fard }
+
+fn execute_candidate_lang(source, candidate_path, out_dir, lang) {
+  if lang == "python" then execute_candidate_python(source, candidate_path, out_dir)
+  else if lang == "javascript" then execute_candidate_js(source, candidate_path, out_dir)
+  else if lang == "rust" then execute_candidate_rust(source, candidate_path, out_dir)
+  else execute_candidate_fard(source, candidate_path, out_dir)
+}
+
+export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate, run_python_check, run_rust_check, run_js_check, verify_candidate_lang, execute_candidate_python, execute_candidate_js, execute_candidate_rust, execute_candidate_fard, execute_candidate_lang }
