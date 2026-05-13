@@ -230,4 +230,31 @@ fn execute_candidate_python(source, candidate_path, out_dir) {
   }
 }
 
-export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate, run_python_check, run_rust_check, run_js_check, verify_candidate_lang, execute_candidate_python }
+
+fn execute_candidate_js(source, candidate_path, out_dir) {
+  let _d = fs.make_dir(out_dir) in
+  let written = write_candidate(candidate_path, source) in
+  let r = process.capture("node", [candidate_path]) in
+  let record = {
+    mode: "js_execute",
+    lang: "javascript",
+    candidate_path: candidate_path,
+    out_dir: out_dir,
+    written: written,
+    ok: r.exit_code == 0,
+    class: classify_output(r.exit_code, r.stdout, r.stderr),
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    stdout_sha256: hash.sha256_text(r.stdout),
+    stderr_sha256: hash.sha256_text(r.stderr),
+    source_sha256: written.source_sha256
+  } in
+  let receipt = hash.sha256_text(json.canonicalize(record)) in
+  let _w = fs.write_text(path.join(out_dir, "js_execution_result.json"), json.canonicalize({
+    result: record, receipt: receipt
+  })) in
+  { result: record, receipt: receipt }
+}
+
+export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate, run_python_check, run_rust_check, run_js_check, verify_candidate_lang, execute_candidate_python, execute_candidate_js }

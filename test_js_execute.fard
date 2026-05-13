@@ -1,0 +1,7 @@
+import("packages/azim_code/verifier") as v
+
+v.execute_candidate_js(
+  "console.log(6 * 7);",
+  "out/test_js_execute/candidate.js",
+  "out/test_js_execute/run"
+)
