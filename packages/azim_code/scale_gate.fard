@@ -1,10 +1,19 @@
 import("std/fs") as fs
+import("std/list") as list
 import("std/path") as path
 import("std/json") as json
 import("std/hash") as hash
 
 fn read_json(p) {
   json.decode(fs.read_text(p))
+}
+
+fn count_langs(receipts) {
+  let langs = list.map(receipts, fn(r) { r.class }) in
+  let unique = list.fold(langs, [], fn(acc, l) {
+    if list.any(acc, fn(x) { x == l }) then acc else list.append(acc, l)
+  }) in
+  list.len(unique)
 }
 
 fn pass_bool(train, audit, min_accepted, min_records, require_loss_decrease) {
@@ -23,7 +32,7 @@ fn build(train_result_path, retraining_manifest_path, out_dir, min_accepted, min
 
   let report = {
     component: "azim_code.scale_gate",
-    version: "1.0.0",
+    version: "1.1.0",
     passed: passed,
     decision: if passed then "pass" else "fail",
     train_result_path: train_result_path,
