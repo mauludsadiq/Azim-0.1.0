@@ -1,0 +1,106 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("tensor") as tensor
+import("tokenizer") as tok
+import("lm_head") as lm
+import("generation_v2") as gen
+import("samplers") as s
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+fn bench_determinism(checkpoint_path, prompt, max_tokens) {
+  let W = load_W(checkpoint_path) in
+  let a = gen.generate_top_k(W, prompt, max_tokens, 10, 1.0) in
+  let b = gen.generate_top_k(W, prompt, max_tokens, 10, 1.0) in
+  let c = gen.generate_greedy(W, prompt, max_tokens) in
+  let d = gen.generate_greedy(W, prompt, max_tokens) in
+  {
+    name: "determinism",
+    topk_match: a == b,
+    greedy_match: c == d,
+    passed: a == b && c == d,
+    topk_output: a,
+    greedy_output: c
+  }
+}
+
+fn bench_receipt(checkpoint_path) {
+  let raw = fs.read_text(checkpoint_path) in
+  let d = json.decode(raw) in
+  let has_receipt = str.starts_with(d.receipt, "sha256:") in
+  let receipt_len = str.len(d.receipt) in
+  {
+    name: "receipt",
+    has_receipt: has_receipt,
+    receipt_length: receipt_len,
+    passed: has_receipt && receipt_len == 71,
+    receipt_prefix: str.slice(d.receipt, 0, 14)
+  }
+}
+
+fn bench_generation_diversity(checkpoint_path, prompts, max_tokens) {
+  let W = load_W(checkpoint_path) in
+  let outputs = list.map(prompts, fn(p) {
+    gen.generate_top_k(W, p, max_tokens, 10, 1.0)
+  }) in
+  let unique = list.fold(outputs, [], fn(acc, o) {
+    if list.any(acc, fn(x) { x == o }) then acc else list.append(acc, o)
+  }) in
+  let diversity = (list.len(unique) + 0.0) / (list.len(outputs) + 0.0) in
+  {
+    name: "diversity",
+    prompt_count: list.len(prompts),
+    unique_outputs: list.len(unique),
+    diversity_ratio: diversity,
+    passed: diversity > 0.5,
+    outputs: outputs
+  }
+}
+
+fn bench_checkpoint_integrity(checkpoint_path) {
+  let d = json.decode(fs.read_text(checkpoint_path)) in
+  let has_dims = list.len(d.W_U_lm_dims) == 2 in
+  let has_data = list.len(d.W_U_lm_data) == list.get(d.W_U_lm_dims, 0) * list.get(d.W_U_lm_dims, 1) in
+  let has_loss = d.avg_loss > 0.0 in
+  {
+    name: "integrity",
+    has_dims: has_dims,
+    has_data: has_data,
+    has_loss: has_loss,
+    dims: d.W_U_lm_dims,
+    params: list.len(d.W_U_lm_data),
+    avg_loss: d.avg_loss,
+    passed: has_dims && has_data && has_loss
+  }
+}
+
+fn run_benchmark(checkpoint_path, prompts, max_tokens) {
+  let det   = bench_determinism(checkpoint_path, list.get(prompts, 0), max_tokens) in
+  let rcpt  = bench_receipt(checkpoint_path) in
+  let div   = bench_generation_diversity(checkpoint_path, prompts, max_tokens) in
+  let integ = bench_checkpoint_integrity(checkpoint_path) in
+  let all_passed = det.passed && rcpt.passed && div.passed && integ.passed in
+  let results = [det, rcpt, div, integ] in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.benchmark",
+    version: "1.0.0",
+    checkpoint_path: checkpoint_path,
+    results: results
+  })) in
+  {
+    ok: true,
+    all_passed: all_passed,
+    passed_count: list.len(list.filter(results, fn(r) { r.passed })),
+    total_count: list.len(results),
+    results: results,
+    receipt: receipt
+  }
+}
+
+export { load_W, bench_determinism, bench_receipt, bench_generation_diversity, bench_checkpoint_integrity, run_benchmark }

@@ -1,0 +1,31 @@
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_trial/benchmark") as bm
+
+let checkpoint = "out/lm_checkpoints2/shard_79.json"
+let prompts = ["the sky is", "in the beginning", "scientists discovered", "the government", "according to"]
+
+test "determinism passes" {
+  let r = bm.bench_determinism(checkpoint, "the sky is", 10) in
+  r.passed
+}
+
+test "receipt passes" {
+  let r = bm.bench_receipt(checkpoint) in
+  r.passed
+}
+
+test "integrity passes" {
+  let r = bm.bench_checkpoint_integrity(checkpoint) in
+  r.passed
+}
+
+test "full benchmark runs" {
+  let r = bm.run_benchmark(checkpoint, prompts, 10) in
+  r.ok
+}
+
+test "benchmark receipt is sha256" {
+  let r = bm.run_benchmark(checkpoint, prompts, 10) in
+  type.of(r.receipt) == "text"
+}

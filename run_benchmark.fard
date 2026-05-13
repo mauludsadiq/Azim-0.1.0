@@ -1,0 +1,9 @@
+import("std/json") as json
+import("std/fs") as fs
+import("packages/azim_trial/benchmark") as bm
+
+let prompts = ["the sky is", "in the beginning", "scientists discovered", "the government", "according to"]
+let result = bm.run_benchmark("out/lm_checkpoints2/shard_79.json", prompts, 15)
+let _ = fs.make_dir("out/benchmark")
+let _ = fs.write_text("out/benchmark/results.json", json.canonicalize(result))
+result
