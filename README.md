@@ -2,7 +2,7 @@
 
 Deterministic distributed AI training on FARD.
 
-Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 13,907 lines of code.
+Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 14,357 lines of code.
 
 -----
 
@@ -26,50 +26,89 @@ LM objective run (next-token prediction). All 80 shards complete.
 Mean loss:    4.7927  (below random baseline 4.8598)
 Final loss:   4.1237  (-0.74 vs random)
 Below random: 47/80 shards
-Trend slope:  -0.0137/shard
 ```
 
-Benchmark suite: 4/4 passing (determinism, receipt, diversity, integrity).
-
-Multi-language self-training loop. Full pipeline confirmed.
-
-```
-Languages:    FARD, Python, Rust, JavaScript
-Accepted:     4/4 candidates (one per language)
-Verified via: fardrun, python3, rustc, node
-Control tokens: <|LANG_FARD|> <|LANG_PYTHON|> <|LANG_RUST|> <|LANG_JS|>
-Scale gate:   language diversity required
-```
+Benchmark suite: 4/4 passing. HumanEval runner: pass/fail receipted.
 
 -----
 
-## Status — All 18 Phases Complete
+## Status
 
-|Milestone                                         |Status|
-|--------------------------------------------------|------|
-|Deterministic runtime (FARD)                      |done  |
-|Cryptographic receipt chain                       |done  |
-|Real gradient descent (SPSA)                      |done  |
-|Full OWT training run (classifier)                |done  |
-|Neural path authoritative                         |done  |
-|Next-token prediction + generation                |done  |
-|linalg native ops (28x speedup)                   |done  |
-|Multi-language structural tokenizer (159 tokens)  |done  |
-|BPE tokenizer (500 merges, vocab 600)             |done  |
-|Verifier-gated self-training loop                 |done  |
-|Scale gate with language diversity                |done  |
-|LM run on OWT (80 shards)                         |done  |
-|Architecture expansion (d_model=32, n_layers=2)   |done  |
-|Blockwise SPSA — all weights simultaneously       |done  |
-|Multi-direction SPSA                              |done  |
-|Generation evaluation suite                       |done  |
-|Deterministic samplers (greedy, top-k, top-p)     |done  |
-|Product interface (CLI)                           |done  |
-|Public benchmark pack                             |done  |
-|Multi-language verifier (Python, Rust, JS, FARD)  |done  |
-|Language control tokens                           |done  |
-|Hybrid orchestration (LLM proposes, Azim verifies)|done  |
-|Train at scale (cloud GPU)                        |next  |
+|Milestone                                                |Status|
+|---------------------------------------------------------|------|
+|Deterministic runtime (FARD)                             |done  |
+|Cryptographic receipt chain                              |done  |
+|Full OWT training runs (classifier + LM)                 |done  |
+|Neural path authoritative                                |done  |
+|linalg native ops (28x speedup)                          |done  |
+|Multi-language tokenizer (159 tokens)                    |done  |
+|BPE tokenizer (500 merges, vocab 600)                    |done  |
+|Verifier-gated self-training loop                        |done  |
+|Scale gate with language diversity                       |done  |
+|Architecture (d_model=32, n_layers=2)                    |done  |
+|Blockwise multi-direction SPSA all weights               |done  |
+|Deterministic samplers (greedy, top-k, top-p)            |done  |
+|CLI + benchmark suite                                    |done  |
+|Multi-language verifier (syntax)                         |done  |
+|Language control tokens                                  |done  |
+|Hybrid orchestration                                     |done  |
+|**Phase C: Execution verifiers (Python, JS, Rust, FARD)**|done  |
+|**Phase C: Unit-test harness**                           |done  |
+|**Phase C: HumanEval runner**                            |done  |
+|Corpus acquisition from verified repos                   |next  |
+|Scale to d_model=128 (6M params, cloud GPU)              |next  |
+
+-----
+
+## Phase C — Code as the Primary Signal
+
+The acceptance manifold has changed. A candidate must now actually execute and pass tests — not just parse.
+
+### Execution Verifiers
+
+```
+Python:     python3 candidate.py       — runs, receipts stdout/stderr
+JavaScript: node candidate.js          — runs, receipts stdout/stderr
+Rust:       rustc compile + run binary — runs, receipts stdout/stderr
+FARD:       fardrun run + receipt chain — executes, verifies receipts
+```
+
+All four confirmed: `stdout: "42\n"`, `exit_code: 0`, `accepted: true`.
+
+### Unit-Test Harness
+
+```
+run_python_with_tests(source, tests, ...)   — appends tests, runs python3
+run_js_with_tests(source, tests, ...)       — appends tests, runs node
+run_rust_with_tests(source, tests, ...)     — wraps in #[cfg(test)], rustc --test
+```
+
+Correct code passes. Wrong code fails. Both outcomes receipted.
+
+### HumanEval Runner
+
+164 Python problems. Each with prompt, candidate solution, and unit tests.
+
+```
+run_problem(problem, candidate, out_dir)    — pass/fail + receipt
+run_suite(problems, candidate_fn, out_dir)  — pass_rate across suite
+```
+
+Correct solution passes. Wrong solution (`return False`) fails. Pass rate computed and receipted.
+
+-----
+
+## Roadmap to GPT-2 Scale
+
+|Phase|Params|GPU hours|Target                       |
+|-----|------|---------|-----------------------------|
+|A1   |6M    |~50      |Real language patterns emerge|
+|A2   |30M   |~200     |HumanEval meaningful scores  |
+|A3   |85M   |~500     |GPT-2 small equivalent       |
+
+Total: ~1,050 A100-hours, ~$1,575. Compute budget within grant ask.
+
+HumanEval is the benchmark. A Python function that passes unit tests is an objective, verifiable signal. At A2 scale (30M params) with execution-verified code training, meaningful HumanEval scores are achievable.
 
 -----
 
@@ -89,140 +128,54 @@ help
 
 ## Multi-Language Pipeline
 
-Full cycle confirmed — generate, verify, train, receipt — in all four languages:
-
 ```
-FARD:       fardrun run        — executes + verifies receipts
-Python:     python3 -m py_compile — syntax check
-Rust:       rustc --edition=2021  — compile check
-JavaScript: node --check          — syntax check
-```
+Language control tokens prepended to every training record:
+<|LANG_FARD|> = 4  <|LANG_PYTHON|> = 5  <|LANG_RUST|> = 6  <|LANG_JS|> = 7
 
-Each candidate is written, executed, receipted, accepted or rejected. Accepted candidates enter the training corpus with language control token prepended.
-
-Language control tokens in the structural tokenizer:
-
-```
-<|LANG_FARD|>       id = 4
-<|LANG_PYTHON|>     id = 5
-<|LANG_RUST|>       id = 6
-<|LANG_JS|>         id = 7
-```
-
-Every tokenized record begins with the appropriate control token. The model learns language-conditional generation.
-
------
-
-## Hybrid Orchestration
-
-External LLMs serve as proposal engines. Azim holds authority over execution, verification, and training.
-
-```
-external LLM proposes code in any language
-Azim writes candidate to disk
-Azim executes via real compiler
-Azim verifies receipt
-Azim accepts or rejects
-Azim trains on accepted corpus
-full receipt chain covers every step
+Generation → Execution → Test → Accept/Reject → Train → Receipt
 ```
 
 -----
 
 ## Architecture
 
-### Current Model (d_model=32)
-
 ```
-d_model:    32
-d_ff:       64
-n_layers:   2
-vocab_size: 600 (BPE)
-params:     ~50,000
+d_model: 32, d_ff: 64, n_layers: 2, vocab: 600 (BPE), params: ~50,000
 ```
 
-### Gradient Method
-
-Blockwise multi-direction SPSA. K directions per weight matrix per step. Gradients averaged. All deterministic. All receipted. Native linalg — 28x speedup.
-
------
-
-## Tokenizers
-
-**azim_code/tokenizer.fard v2.1.0** — 159-token structural tokenizer.
-
-- Language control tokens: FARD, Python, Rust, JavaScript
-- Keywords for all four languages
-- Operators, identifiers, integers, floats, strings, comments
-- Every tokenization receipted
-
-**azim_trial/bpe_train.fard + bpe_encode.fard** — Learned BPE. 500 merges. 600-token vocabulary.
-
------
-
-## Scale Gate
-
-Enforces evidence before any architecture expansion:
-
-```
-loss decreased:       required
-min accepted:         configurable
-min records:          configurable
-min languages:        required (diversity enforcement)
-all receipts valid:   required
-```
-
-All four checks must pass. Decision is cryptographically receipted.
-
------
-
-## Benchmark
-
-```
-fardrun run --program run_benchmark.fard --out out/benchmark
-
-determinism:  PASS
-receipt:      PASS
-diversity:    PASS
-integrity:    PASS
-```
+Blockwise multi-direction SPSA. All weights train simultaneously. Native linalg — 28x speedup.
 
 -----
 
 ## Test Coverage
 
-180 test files. 0 failures.
+188 test files. 0 failures.
 
 -----
 
 ## Repository Structure
 
 ```
-packages/azim_trial/
-  tensor.fard, linalg_bridge.fard
-  weights_32.fard, block_32.fard
-  train_all_weights.fard, spsa_multi.fard
-  samplers.fard, generation_v2.fard
-  generation_eval.fard, benchmark.fard
-  bpe_train.fard, bpe_encode.fard
-
+packages/azim_trial/         — core LM training system
 packages/azim_code/
-  tokenizer.fard           — 159-token multi-language tokenizer
-  lang_detect.fard         — language detection from extension
-  corpus_packer.fard       — language-tagged corpus with control tokens
-  verifier.fard            — multi-language execution verifier
-  multilang_generation_wrapper.fard — language-aware generation
-  hybrid_proposer.fard     — LLM proposal + verification
-  hybrid_loop.fard         — full hybrid training loop
-  scale_gate.fard          — evidence + diversity gated scaling
-  loop_run.fard            — full self-training loop
+  verifier.fard              — execution verifiers (Python, JS, Rust, FARD)
+  test_harness.fard          — unit-test runner (Python, JS, Rust)
+  humaneval_runner.fard      — HumanEval pass/fail with receipts
+  tokenizer.fard             — 159-token multi-language tokenizer
+  lang_detect.fard           — language detection
+  corpus_packer.fard         — language-tagged corpus
+  multilang_generation_wrapper.fard
+  hybrid_proposer.fard
+  hybrid_loop.fard
+  scale_gate.fard
+  loop_run.fard
 
-azim.fard                  — CLI entrypoint
-run_benchmark.fard         — benchmark suite
-main_lm.fard               — OWT training
+azim.fard                    — CLI
+run_benchmark.fard           — benchmark suite
+main_lm.fard                 — OWT training
 
 tests/
-  test_*.fard  (180 files)
+  test_*.fard  (188 files)
 ```
 
 -----
