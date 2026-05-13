@@ -16,11 +16,12 @@ fn count_langs(receipts) {
   list.len(unique)
 }
 
-fn pass_bool(train, audit, min_accepted, min_records, require_loss_decrease) {
+fn pass_bool(train, audit, min_accepted, min_records, min_langs, require_loss_decrease) {
   let loss_ok = if require_loss_decrease then train.avg_loss_after < train.avg_loss_before else true in
   let accepted_ok = audit.inputs.generation_accepted >= min_accepted in
   let records_ok = audit.inputs.merged_records >= min_records in
-  loss_ok && accepted_ok && records_ok
+  let lang_ok = count_langs(audit.verifier_receipts) >= min_langs in
+  loss_ok && accepted_ok && records_ok && lang_ok
 }
 
 fn build(train_result_path, retraining_manifest_path, out_dir, min_accepted, min_records, require_loss_decrease) {
