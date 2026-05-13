@@ -1,0 +1,21 @@
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/generation_v2") as gen
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+let W79 = load_W("out/lm_checkpoints2/shard_79.json")
+let prompt = "the sky is"
+
+{
+  greedy:  gen.generate_greedy(W79, prompt, 15),
+  top_k_5:  gen.generate_top_k(W79, prompt, 15, 5,  1.0),
+  top_k_10: gen.generate_top_k(W79, prompt, 15, 10, 1.0),
+  top_k_10_hot: gen.generate_top_k(W79, prompt, 15, 10, 1.5),
+  top_p_90: gen.generate_top_p(W79, prompt, 15, 0.9, 1.0)
+}

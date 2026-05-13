@@ -1,0 +1,55 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("tensor") as tensor
+import("tokenizer") as tok
+import("lm_head") as lm
+import("samplers") as s
+
+fn generate_greedy(W, prompt, max_tokens) {
+  let prompt_ids = tok.tokenize(prompt) in
+  let result = list.fold(list.range(0, max_tokens), { ids: prompt_ids, generated: [] }, fn(acc, _) {
+    let logits = tensor.matvec(W, lm.hidden_for_tokens(acc.ids)) in
+    let next_id = s.greedy(logits.data) in
+    if next_id == tok.eos_id then acc else
+    { ids: list.append(acc.ids, next_id), generated: list.append(acc.generated, next_id) }
+  }) in
+  tok.detokenize(result.generated)
+}
+
+fn generate_top_k(W, prompt, max_tokens, k, temperature) {
+  let prompt_ids = tok.tokenize(prompt) in
+  let result = list.fold(list.range(0, max_tokens),
+    { ids: prompt_ids, generated: [], step: 0 }, fn(acc, _) {
+    let logits = tensor.matvec(W, lm.hidden_for_tokens(acc.ids)) in
+    let seed = hash.sha256_text(json.canonicalize({
+      step: acc.step, last: list.get(acc.ids, list.len(acc.ids) - 1)
+    })) in
+    let next_id = s.sample_top_k(logits.data, k, temperature, seed) in
+    if next_id == tok.eos_id then acc else
+    { ids: list.append(acc.ids, next_id),
+      generated: list.append(acc.generated, next_id),
+      step: acc.step + 1 }
+  }) in
+  tok.detokenize(result.generated)
+}
+
+fn generate_top_p(W, prompt, max_tokens, p, temperature) {
+  let prompt_ids = tok.tokenize(prompt) in
+  let result = list.fold(list.range(0, max_tokens),
+    { ids: prompt_ids, generated: [], step: 0 }, fn(acc, _) {
+    let logits = tensor.matvec(W, lm.hidden_for_tokens(acc.ids)) in
+    let seed = hash.sha256_text(json.canonicalize({
+      step: acc.step, last: list.get(acc.ids, list.len(acc.ids) - 1)
+    })) in
+    let next_id = s.sample_top_p(logits.data, p, temperature, seed) in
+    if next_id == tok.eos_id then acc else
+    { ids: list.append(acc.ids, next_id),
+      generated: list.append(acc.generated, next_id),
+      step: acc.step + 1 }
+  }) in
+  tok.detokenize(result.generated)
+}
+
+export { generate_greedy, generate_top_k, generate_top_p }

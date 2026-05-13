@@ -1,0 +1,38 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("std/json") as json
+import("std/fs") as fs
+import("../packages/azim_trial/tensor") as tensor
+import("../packages/azim_trial/generation_v2") as gen
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+let W79 = load_W("out/lm_checkpoints2/shard_79.json")
+
+test "greedy returns text" {
+  type.of(gen.generate_greedy(W79, "the sky", 5)) == "text"
+}
+
+test "top_k returns text" {
+  type.of(gen.generate_top_k(W79, "the sky", 5, 10, 1.0)) == "text"
+}
+
+test "top_p returns text" {
+  type.of(gen.generate_top_p(W79, "the sky", 5, 0.9, 1.0)) == "text"
+}
+
+test "top_k breaks repetition vs greedy" {
+  let greedy = gen.generate_greedy(W79, "the sky is", 10) in
+  let topk   = gen.generate_top_k(W79,  "the sky is", 10, 10, 1.5) in
+  greedy != topk
+}
+
+test "top_k is deterministic" {
+  let a = gen.generate_top_k(W79, "the sky", 5, 10, 1.0) in
+  let b = gen.generate_top_k(W79, "the sky", 5, 10, 1.0) in
+  a == b
+}

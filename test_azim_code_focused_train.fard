@@ -1,0 +1,10 @@
+import("packages/azim_code/code_train_adapter") as train
+
+train.train_shard(
+  "out/azim_code_focused_corpus/focused_train_shard_000.jsonl",
+  "out/azim_code_focused_train",
+  0.001,
+  10.0,
+  25,
+  5
+)
