@@ -1,0 +1,82 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("std/math") as math
+import("tensor") as tensor
+import("tokenizer") as tok
+import("lm_head") as lm
+import("lm_train") as lmt
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+fn greedy_generate(W, prompt, max_tokens) {
+  let prompt_ids = tok.tokenize(prompt) in
+  let result = list.fold(list.range(0, max_tokens), { ids: prompt_ids, generated: [] }, fn(acc, _) {
+    let logits = tensor.matvec(W, lm.hidden_for_tokens(acc.ids)) in
+    let next_id = tensor.argmax(logits.data) in
+    if next_id == tok.eos_id then acc else
+    { ids: list.append(acc.ids, next_id), generated: list.append(acc.generated, next_id) }
+  }) in
+  tok.detokenize(result.generated)
+}
+
+fn repetition_ratio(text) {
+  let chars = str.chars(text) in
+  let n = list.len(chars) in
+  if n < 2 then 1.0 else
+  let unique = list.fold(chars, [], fn(acc, c) {
+    if list.any(acc, fn(x) { x == c }) then acc else list.append(acc, c)
+  }) in
+  1.0 - ((list.len(unique) + 0.0) / (n + 0.0))
+}
+
+fn eval_checkpoint(path, prompts, max_tokens) {
+  let W = load_W(path) in
+  let d = json.decode(fs.read_text(path)) in
+  let samples = list.map(prompts, fn(p) {
+    let text = greedy_generate(W, p, max_tokens) in
+    {
+      prompt: p,
+      generated: text,
+      length: str.len(text),
+      repetition_ratio: repetition_ratio(text)
+    }
+  }) in
+  let avg_rep = list.fold(samples, 0.0, fn(acc, s) { acc + s.repetition_ratio }) / list.len(samples) in
+  let avg_len = list.fold(samples, 0.0, fn(acc, s) { acc + (s.length + 0.0) }) / list.len(samples) in
+  {
+    shard_index: d.shard_index,
+    avg_loss: d.avg_loss,
+    samples: samples,
+    avg_repetition_ratio: avg_rep,
+    avg_length: avg_len,
+    receipt: hash.sha256_text(json.canonicalize({
+      component: "azim_trial.generation_eval",
+      version: "1.0.0",
+      path: path,
+      samples: samples
+    }))
+  }
+}
+
+fn eval_run(checkpoint_dir, shard_indices, prompts, max_tokens) {
+  let results = list.map(shard_indices, fn(idx) {
+    let path = str.concat([checkpoint_dir, "/shard_", str.from(idx), ".json"]) in
+    eval_checkpoint(path, prompts, max_tokens)
+  }) in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_trial.generation_eval.run",
+    version: "1.0.0",
+    checkpoint_dir: checkpoint_dir,
+    shard_indices: shard_indices,
+    results: results
+  })) in
+  { results: results, receipt: receipt }
+}
+
+export { load_W, greedy_generate, repetition_ratio, eval_checkpoint, eval_run }

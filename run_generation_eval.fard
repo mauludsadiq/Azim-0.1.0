@@ -1,0 +1,25 @@
+import("std/fs") as fs
+import("std/json") as json
+import("std/list") as list
+import("packages/azim_trial/generation_eval") as ev
+
+let prompts = [
+  "the sky is",
+  "in the beginning",
+  "scientists discovered",
+  "the government announced",
+  "according to reports"
+]
+
+let indices = [0, 10, 20, 30, 40, 50, 60, 70, 79]
+
+let result = ev.eval_run("out/lm_checkpoints2", indices, prompts, 15)
+
+let _ = fs.make_dir("out/eval")
+let _ = fs.write_text("out/eval/generation_eval.json", json.canonicalize(result))
+
+{
+  ok: true,
+  shards_evaluated: list.len(result.results),
+  receipt: result.receipt
+}

@@ -1,0 +1,7 @@
+import("packages/azim_code/focused_corpus_packer") as focused
+
+focused.pack(
+  "packages/azim_trial",
+  "out/azim_code_focused_corpus",
+  25
+)

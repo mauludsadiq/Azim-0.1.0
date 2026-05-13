@@ -1,0 +1,37 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_trial/generation_eval") as ev
+
+test "load_W loads shard 0" {
+  let W = ev.load_W("out/lm_checkpoints2/shard_0.json") in
+  list.get(W.dims, 0) == 129
+}
+
+test "greedy_generate returns text" {
+  let W = ev.load_W("out/lm_checkpoints2/shard_0.json") in
+  type.of(ev.greedy_generate(W, "the sky", 5)) == "text"
+}
+
+test "repetition_ratio between 0 and 1" {
+  let r = ev.repetition_ratio("AAAAAAAAAA") in
+  r > 0.0 && r <= 1.0
+}
+
+test "low repetition on varied text" {
+  let r = ev.repetition_ratio("the quick brown fox") in
+  r < ev.repetition_ratio("AAAAAAAAAA")
+}
+
+test "eval_checkpoint returns record" {
+  let r = ev.eval_checkpoint("out/lm_checkpoints2/shard_0.json", ["the sky"], 5) in
+  type.of(r) == "record"
+}
+
+test "shard 79 generates differently from shard 0" {
+  let W0  = ev.load_W("out/lm_checkpoints2/shard_0.json") in
+  let W79 = ev.load_W("out/lm_checkpoints2/shard_79.json") in
+  let g0  = ev.greedy_generate(W0,  "the sky is", 8) in
+  let g79 = ev.greedy_generate(W79, "the sky is", 8) in
+  g0 != g79
+}

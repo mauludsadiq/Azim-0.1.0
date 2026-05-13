@@ -1,0 +1,54 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("corpus_packer") as corpus
+import("tokenizer") as tok
+
+fn is_model_building_path(p) {
+  str.contains(p, "block") ||
+  str.contains(p, "bpe") ||
+  str.contains(p, "generation") ||
+  str.contains(p, "graph_train") ||
+  str.contains(p, "gradient") ||
+  str.contains(p, "lm_") ||
+  str.contains(p, "loss") ||
+  str.contains(p, "attention") ||
+  str.contains(p, "embedding") ||
+  str.contains(p, "weights") ||
+  str.contains(p, "checkpoint") ||
+  str.contains(p, "optimizer") ||
+  str.contains(p, "tensor") ||
+  str.contains(p, "train")
+}
+
+fn pack(root, out_dir, max_files) {
+  let _ = fs.make_dir(out_dir) in
+  let files0 = corpus.walk_dir(root) in
+  let focused0 = list.filter(files0, fn(p) { is_model_building_path(p) }) in
+  let focused = if max_files < 0 then focused0 else list.take(focused0, max_files) in
+  let records = list.map(focused, fn(p) { corpus.file_record(p) }) in
+  let payload = corpus.jsonl(records) in
+  let shard_path = path.join(out_dir, "focused_train_shard_000.jsonl") in
+  let _w = fs.write_text(shard_path, payload) in
+  let manifest = {
+    component: "azim_code.focused_corpus_packer",
+    version: "1.0.0",
+    root: root,
+    out_dir: out_dir,
+    file_count: list.len(focused),
+    total_tokens: list.fold(records, 0, fn(a, r) { a + r.token_count }),
+    shard_path: shard_path,
+    shard_sha256: hash.sha256_text(payload),
+    tokenizer_vocab_sha256: tok.vocab_sha256,
+    paths: focused
+  } in
+  let manifest_text = json.canonicalize(manifest) in
+  let manifest_path = path.join(out_dir, "manifest.json") in
+  let _m = fs.write_text(manifest_path, manifest_text) in
+  { ok: true, manifest: manifest, receipt: hash.sha256_text(manifest_text) }
+}
+
+export { is_model_building_path, pack }
