@@ -1,0 +1,35 @@
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("std/json") as json
+import("packages/azim_trial/lm_head") as lm
+import("packages/azim_trial/lm_train") as lmt
+
+fn non_empty_lines(text) {
+  list.filter(str.split(text, "\n"), fn(l) { str.len(str.trim(l)) > 0 })
+}
+
+let records = list.map(
+  non_empty_lines(fs.read_text("out/github_corpus/full/train_shard.jsonl")),
+  fn(line) { json.decode(line) }
+)
+
+let trained = list.fold(records,
+  { W: lm.W_U_lm, steps: 0, losses: [] },
+  fn(acc, record) {
+    let result = list.fold(list.range(0, 3), acc, fn(a, step) {
+      let s = lmt.lm_train_step(a.W, str.from(list.len(record.tokens)), 0.001, 0.0001) in
+      { W: s.W_U_lm, steps: a.steps + 1, losses: list.append(a.losses, s.loss_before) }
+    }) in
+    result
+  })
+
+let avg = list.fold(trained.losses, 0.0, fn(a, x) { a + x }) / list.len(trained.losses)
+
+{
+  records_trained: list.len(records),
+  total_steps: trained.steps,
+  avg_loss: avg,
+  first_loss: list.get(trained.losses, 0),
+  last_loss: list.get(trained.losses, trained.steps - 1)
+}
