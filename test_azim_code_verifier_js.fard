@@ -1,0 +1,8 @@
+import("packages/azim_code/verifier") as v
+
+v.verify_candidate_lang(
+  "function add(a, b) {\n  return a + b;\n}\n",
+  "out/azim_code_multilang_candidates/candidate.js",
+  "out/azim_code_multilang_runs/js",
+  "javascript"
+)

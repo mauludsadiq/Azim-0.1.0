@@ -1,0 +1,8 @@
+import("packages/azim_code/verifier") as v
+
+v.verify_candidate_lang(
+  "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n",
+  "out/azim_code_multilang_candidates/candidate.rs",
+  "out/azim_code_multilang_runs/rust",
+  "rust"
+)
