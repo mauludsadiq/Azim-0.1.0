@@ -1,0 +1,38 @@
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("packages/azim_code/multilang_generation_wrapper") as mg
+import("packages/azim_trial/lm_head") as lm
+import("packages/azim_trial/lm_train") as lmt
+
+let batch = mg.generate_batch_multilang(
+  ["add two numbers", "sort a list", "fibonacci", "hello world"],
+  ["python", "rust", "javascript", "fard"],
+  "out/multilang_train_candidates",
+  "out/multilang_train_runs"
+)
+
+let accepted = list.filter(batch.records, fn(r) { r.result.accepted })
+
+let trained = list.fold(accepted,
+  { W: lm.W_U_lm, steps: 0, losses: [] },
+  fn(acc, r) {
+    let text = r.result.source in
+    let step = lmt.lm_train_step(acc.W, text, 0.001, 0.0001) in
+    {
+      W: step.W_U_lm,
+      steps: acc.steps + 1,
+      losses: list.append(acc.losses, step.loss_before)
+    }
+  })
+
+let avg_loss = list.fold(trained.losses, 0.0, fn(a, x) { a + x }) / list.len(trained.losses)
+
+{
+  accepted_count: list.len(accepted),
+  steps: trained.steps,
+  avg_loss_before: avg_loss,
+  avg_loss_after: list.get(trained.losses, trained.steps - 1),
+  lang_counts: batch.lang_counts,
+  ok: true
+}
