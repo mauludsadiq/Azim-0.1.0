@@ -257,4 +257,83 @@ fn execute_candidate_js(source, candidate_path, out_dir) {
   { result: record, receipt: receipt }
 }
 
-export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate, run_python_check, run_rust_check, run_js_check, verify_candidate_lang, execute_candidate_python, execute_candidate_js }
+
+fn execute_candidate_rust(source, candidate_path, out_dir) {
+  let _d = fs.make_dir(out_dir) in
+  let written = write_candidate(candidate_path, source) in
+  let bin_path = path.join(out_dir, "candidate_bin") in
+  let compile = process.capture("rustc", ["--edition=2021", candidate_path, "-o", bin_path]) in
+  if compile.exit_code != 0 then
+    let record = {
+      mode: "rust_execute",
+      lang: "rust",
+      candidate_path: candidate_path,
+      out_dir: out_dir,
+      written: written,
+      ok: false,
+      class: "compile_error",
+      exit_code: compile.exit_code,
+      stdout: compile.stdout,
+      stderr: compile.stderr,
+      stdout_sha256: hash.sha256_text(compile.stdout),
+      stderr_sha256: hash.sha256_text(compile.stderr),
+      source_sha256: written.source_sha256
+    } in
+    let receipt = hash.sha256_text(json.canonicalize(record)) in
+    let _w = fs.write_text(path.join(out_dir, "rust_execution_result.json"), json.canonicalize({
+      result: record, receipt: receipt
+    })) in
+    { result: record, receipt: receipt }
+  else
+    let run = process.capture(bin_path, []) in
+    let record = {
+      mode: "rust_execute",
+      lang: "rust",
+      candidate_path: candidate_path,
+      out_dir: out_dir,
+      written: written,
+      ok: run.exit_code == 0,
+      class: classify_output(run.exit_code, run.stdout, run.stderr),
+      exit_code: run.exit_code,
+      stdout: run.stdout,
+      stderr: run.stderr,
+      stdout_sha256: hash.sha256_text(run.stdout),
+      stderr_sha256: hash.sha256_text(run.stderr),
+      source_sha256: written.source_sha256
+    } in
+    let receipt = hash.sha256_text(json.canonicalize(record)) in
+    let _w = fs.write_text(path.join(out_dir, "rust_execution_result.json"), json.canonicalize({
+      result: record, receipt: receipt
+    })) in
+    { result: record, receipt: receipt }
+}
+
+fn execute_candidate_fard(source, candidate_path, out_dir) {
+  let _d = fs.make_dir(out_dir) in
+  let written = write_candidate(candidate_path, source) in
+  let run_out = path.join(out_dir, "fard_run") in
+  let r = process.capture("fardrun", ["run", "--program", candidate_path, "--out", run_out]) in
+  let record = {
+    mode: "fard_execute",
+    lang: "fard",
+    candidate_path: candidate_path,
+    out_dir: out_dir,
+    written: written,
+    ok: r.exit_code == 0,
+    class: if r.exit_code == 0 then "accepted" else classify_output(r.exit_code, r.stdout, r.stderr),
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    stdout_sha256: hash.sha256_text(r.stdout),
+    stderr_sha256: hash.sha256_text(r.stderr),
+    source_sha256: written.source_sha256,
+    run_out: run_out
+  } in
+  let receipt = hash.sha256_text(json.canonicalize(record)) in
+  let _w = fs.write_text(path.join(out_dir, "fard_execution_result.json"), json.canonicalize({
+    result: record, receipt: receipt
+  })) in
+  { result: record, receipt: receipt }
+}
+
+export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate, run_python_check, run_rust_check, run_js_check, verify_candidate_lang, execute_candidate_python, execute_candidate_js, execute_candidate_rust, execute_candidate_fard }

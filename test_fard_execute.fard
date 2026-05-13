@@ -1,0 +1,7 @@
+import("packages/azim_code/verifier") as v
+
+v.execute_candidate_fard(
+  "{ ok: true, value: 42 }",
+  "out/test_fard_execute/candidate.fard",
+  "out/test_fard_execute/run"
+)

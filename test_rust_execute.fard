@@ -1,0 +1,7 @@
+import("packages/azim_code/verifier") as v
+
+v.execute_candidate_rust(
+  "fn main() { println!(\"{}\", 6 * 7); }",
+  "out/test_rust_execute/candidate.rs",
+  "out/test_rust_execute/run"
+)
