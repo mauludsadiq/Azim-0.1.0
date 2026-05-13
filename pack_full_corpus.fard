@@ -1,0 +1,41 @@
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("std/json") as json
+import("std/hash") as hash
+
+let dirs = [
+  "out/github_corpus/Python",
+  "out/github_corpus/algorithms",
+  "out/github_corpus/interactive-coding-challenges",
+  "out/github_corpus/JavaScript"
+]
+
+let all_lines = list.fold(dirs, [], fn(acc, dir) {
+  let shard_path = str.concat([dir, "/acquired_shard.jsonl"]) in
+  let text = fs.read_text(shard_path) in
+  let lines = list.filter(str.split(text, "\n"), fn(l) { str.len(str.trim(l)) > 0 }) in
+  list.concat([acc, lines])
+})
+
+let payload = str.join(all_lines, "\n")
+let _ = fs.make_dir("out/github_corpus/full")
+let _ = fs.write_text("out/github_corpus/full/train_shard.jsonl", payload)
+
+let manifest = {
+  component: "azim_code.corpus_pack",
+  version: "1.0.0",
+  sources: dirs,
+  total_records: list.len(all_lines),
+  shard_path: "out/github_corpus/full/train_shard.jsonl",
+  shard_sha256: hash.sha256_text(payload)
+}
+let manifest_text = json.canonicalize(manifest)
+let _ = fs.write_text("out/github_corpus/full/manifest.json", manifest_text)
+
+{
+  ok: true,
+  total_records: list.len(all_lines),
+  shard_sha256: manifest.shard_sha256,
+  receipt: hash.sha256_text(manifest_text)
+}
