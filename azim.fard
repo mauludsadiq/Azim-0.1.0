@@ -1,0 +1,127 @@
+import("std/env") as env
+import("std/list") as list
+import("std/str") as str
+import("std/json") as json
+import("std/fs") as fs
+import("std/hash") as hash
+import("std/type") as type
+import("packages/azim_trial/tokenizer") as tok
+import("packages/azim_trial/tensor") as tensor
+import("packages/azim_trial/lm_head") as lm
+import("packages/azim_trial/generation_v2") as gen
+import("packages/azim_trial/generation_eval") as ev
+import("packages/azim_trial/samplers") as s
+
+fn get_arg(args, flag, default) {
+  let idx = list.fold(list.range(0, list.len(args)), -1, fn(acc, i) {
+    if list.get(args, i) == flag then i else acc
+  }) in
+  if idx < 0 || idx + 1 >= list.len(args) then default
+  else list.get(args, idx + 1)
+}
+
+fn has_flag(args, flag) {
+  list.any(args, fn(a) { a == flag })
+}
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+fn cmd_generate(args) {
+  let prompt = get_arg(args, "--prompt", "the sky is") in
+  let checkpoint = get_arg(args, "--checkpoint", "out/lm_checkpoints2/shard_79.json") in
+  let max_tokens = 20 in
+  let mode = get_arg(args, "--mode", "topk") in
+  let W = load_W(checkpoint) in
+  let output = if mode == "greedy" then gen.generate_greedy(W, prompt, max_tokens)
+    else if mode == "topp" then gen.generate_top_p(W, prompt, max_tokens, 0.9, 1.0)
+    else gen.generate_top_k(W, prompt, max_tokens, 10, 1.0) in
+  {
+    command: "generate",
+    prompt: prompt,
+    output: output,
+    full_text: str.concat([prompt, output]),
+    checkpoint: checkpoint,
+    mode: mode,
+    receipt: hash.sha256_text(json.canonicalize({
+      component: "azim.cli.generate",
+      prompt: prompt,
+      checkpoint: checkpoint,
+      output: output
+    }))
+  }
+}
+
+fn cmd_inspect(args) {
+  let checkpoint = get_arg(args, "--checkpoint", "out/lm_checkpoints2/shard_79.json") in
+  let d = json.decode(fs.read_text(checkpoint)) in
+  let flat = d.W_U_lm_data in
+  let n = list.len(flat) in
+  let l2 = list.fold(flat, 0.0, fn(acc, x) { acc + x * x }) in
+  let mean = list.fold(flat, 0.0, fn(acc, x) { acc + x }) / (n + 0.0) in
+  {
+    command: "inspect",
+    checkpoint: checkpoint,
+    shard_index: d.shard_index,
+    avg_loss: d.avg_loss,
+    receipt: d.receipt,
+    params: n,
+    dims: d.W_U_lm_dims,
+    weight_l2: l2,
+    weight_mean: mean
+  }
+}
+
+fn cmd_eval(args) {
+  let dir = get_arg(args, "--checkpoints", "out/lm_checkpoints2") in
+  let prompts = ["the sky is", "in the beginning", "scientists discovered"] in
+  let indices = [0, 20, 40, 60, 79] in
+  ev.eval_run(dir, indices, prompts, 10)
+}
+
+fn cmd_verify(args) {
+  let path = get_arg(args, "--proof", "out/lm_checkpoints2/shard_79.json") in
+  let raw = fs.read_text(path) in
+  let d = json.decode(raw) in
+  let raw_sha = hash.sha256_text(raw) in
+  {
+    command: "verify",
+    path: path,
+    stored_receipt: d.receipt,
+    checkpoint_sha256: raw_sha,
+    shard_index: d.shard_index,
+    avg_loss: d.avg_loss,
+    steps: d.steps,
+    version: d.version,
+    verified: str.starts_with(d.receipt, "sha256:")
+  }
+}
+
+fn cmd_help() {
+  {
+    command: "help",
+    usage: "fardrun run --program azim.fard --out <out> -- <command> [options]",
+    commands: {
+      generate: "Generate text. Options: --prompt, --checkpoint, --mode (greedy|topk|topp)",
+      inspect:  "Inspect a checkpoint. Options: --checkpoint",
+      eval:     "Evaluate generation across checkpoints. Options: --checkpoints",
+      verify:   "Verify a checkpoint receipt. Options: --proof",
+      help:     "Show this help"
+    }
+  }
+}
+
+let all_args = env.args()
+let sep = list.fold(list.range(0, list.len(all_args)), -1, fn(acc, i) {
+  if list.get(all_args, i) == "--" then i else acc
+}) in
+let args = if sep < 0 then [] else list.drop(all_args, sep + 1) in
+let command = if list.len(args) == 0 then "help" else list.get(args, 0) in
+
+if command == "generate" then cmd_generate(args)
+else if command == "inspect" then cmd_inspect(args)
+else if command == "eval" then cmd_eval(args)
+else if command == "verify" then cmd_verify(args)
+else cmd_help()
