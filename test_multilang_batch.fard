@@ -1,0 +1,8 @@
+import("packages/azim_code/multilang_generation_wrapper") as mg
+
+mg.generate_batch_multilang(
+  ["add two numbers", "sort a list", "fibonacci", "hello world"],
+  ["python", "rust", "javascript", "fard"],
+  "out/multilang_batch_candidates",
+  "out/multilang_batch_runs"
+)
