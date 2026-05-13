@@ -1,0 +1,100 @@
+import("std/list") as list
+import("std/math") as math
+import("std/str") as str
+import("std/hash") as hash
+import("std/json") as json
+import("std/float") as float
+import("std/float") as float
+import("tensor") as tensor
+
+fn softmax_with_temp(logits, temperature) {
+  let scaled = list.map(logits, fn(x) { x / temperature }) in
+  let maxv = list.fold(scaled, list.get(scaled, 0), fn(acc, x) { if x > acc then x else acc }) in
+  let exps = list.map(scaled, fn(x) { math.exp(x - maxv) }) in
+  let total = list.fold(exps, 0.0, fn(acc, x) { acc + x }) in
+  list.map(exps, fn(x) { x / total })
+}
+
+fn top_k_mask(probs, k) {
+  let n = list.len(probs) in
+  let indexed = list.map(list.range(0, n), fn(i) {
+    { k: 0 - float.to_int(list.get(probs, i) * 100000.0), idx: i, prob: list.get(probs, i) }
+  }) in
+  let sorted = list.sort_by_int_key(indexed, fn(x) { x }) in
+  let top = list.take(sorted, k) in
+  let top_sum = list.fold(top, 0.0, fn(acc, x) { acc + x.prob }) in
+  list.map(list.range(0, n), fn(i) {
+    let in_top = list.any(top, fn(x) { x.idx == i }) in
+    if in_top then list.get(probs, i) / top_sum else 0.0
+  })
+}
+
+fn top_p_mask(probs, p) {
+  let n = list.len(probs) in
+  let indexed = list.map(list.range(0, n), fn(i) {
+    { k: 0 - float.to_int(list.get(probs, i) * 100000.0), idx: i, prob: list.get(probs, i) }
+  }) in
+  let sorted = list.sort_by_int_key(indexed, fn(x) { x }) in
+  let selected = list.fold(sorted, { items: [], cumsum: 0.0, done: false }, fn(acc, x) {
+    if acc.done then acc else
+    let new_sum = acc.cumsum + x.prob in
+    if acc.cumsum >= p then { items: acc.items, cumsum: new_sum, done: true }
+    else { items: list.append(acc.items, x), cumsum: new_sum, done: false }
+  }) in
+  let kept = if list.len(selected.items) == 0
+    then [list.get(sorted, 0)]
+    else selected.items in
+  let kept_sum = list.fold(kept, 0.0, fn(acc, x) { acc + x.prob }) in
+  list.map(list.range(0, n), fn(i) {
+    let in_kept = list.any(kept, fn(x) { x.idx == i }) in
+    if in_kept then list.get(probs, i) / kept_sum else 0.0
+  })
+}
+
+fn deterministic_sample(probs, seed) {
+  let h = hash.sha256_text(json.canonicalize({ seed: seed, probs0: list.get(probs, 0) })) in
+  let frac = list.fold(str.chars(str.slice(h, 7, 15)), 0.0, fn(acc, c) {
+    let v = if c == "0" then 0 else if c == "1" then 1 else if c == "2" then 2
+       else if c == "3" then 3 else if c == "4" then 4 else if c == "5" then 5
+       else if c == "6" then 6 else if c == "7" then 7 else if c == "8" then 8
+       else if c == "9" then 9 else if c == "a" then 10 else if c == "b" then 11
+       else if c == "c" then 12 else if c == "d" then 13 else if c == "e" then 14
+       else 15 in
+    acc * 16.0 + (v + 0.0)
+  }) in
+  let r = (frac / 4294967296.0) in
+  let n = list.len(probs) in
+  let result = list.fold(list.range(0, n), { cumsum: 0.0, chosen: 0, done: false }, fn(acc, i) {
+    if acc.done then acc else
+    let new_sum = acc.cumsum + list.get(probs, i) in
+    if new_sum >= r then { cumsum: new_sum, chosen: i, done: true }
+    else { cumsum: new_sum, chosen: i, done: false }
+  }) in
+  result.chosen
+}
+
+fn greedy(logits) {
+  tensor.argmax(logits)
+}
+
+fn sample_top_k(logits, k, temperature, seed) {
+  let probs = softmax_with_temp(logits, temperature) in
+  let masked = top_k_mask(probs, k) in
+  deterministic_sample(masked, seed)
+}
+
+fn sample_top_p(logits, p, temperature, seed) {
+  let probs = softmax_with_temp(logits, temperature) in
+  let masked = top_p_mask(probs, p) in
+  deterministic_sample(masked, seed)
+}
+
+export {
+  softmax_with_temp,
+  top_k_mask,
+  top_p_mask,
+  deterministic_sample,
+  greedy,
+  sample_top_k,
+  sample_top_p
+}

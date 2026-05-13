@@ -1,0 +1,6 @@
+import("std/float") as float
+import("std/type") as type
+import("std/list") as list
+
+let x = float.to_int(0.9 * 100000.0)
+{ val: x, type_of: type.of(x) }

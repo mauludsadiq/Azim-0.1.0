@@ -1,0 +1,4 @@
+import("std/list") as list
+
+let items = [{ k: 3, v: "c" }, { k: 1, v: "a" }, { k: 2, v: "b" }]
+list.sort_by_int_key(items, fn(x) { x })
