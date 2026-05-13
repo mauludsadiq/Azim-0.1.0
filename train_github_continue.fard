@@ -1,12 +1,11 @@
 import("packages/azim_code/code_train_adapter") as train
 
-# Use the properly-sized checkpoint
 train.train_shard_from_checkpoint(
-  "out/github_corpus/full/train_shard.jsonl",
+  "out/github_corpus/full/train_shard_129.jsonl",
   "out/github_corpus/full",
   0.0005,
   0.0001,
-  10,
-  10,
-  "out/code_checkpoint_init.json"
+  -1,
+  20,
+  "out/github_corpus/full/code_checkpoint.json"  # resume from previous
 )
