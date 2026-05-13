@@ -109,4 +109,95 @@ fn verify_candidate(source, candidate_path, out_dir) {
   }
 }
 
-export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate }
+fn run_python_check(program_path) {
+  let r = process.capture("python3", ["-m", "py_compile", program_path]) in
+  let record = {
+    mode: "python_check",
+    program_path: program_path,
+    ok: r.exit_code == 0,
+    class: classify_output(r.exit_code, r.stdout, r.stderr),
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr
+  } in
+  { result: record, receipt: hash.sha256_text(json.canonicalize(record)) }
+}
+
+fn run_rust_check(program_path) {
+  let r = process.capture("rustc", ["--edition=2021", "--crate-type=lib", program_path]) in
+  let record = {
+    mode: "rust_check",
+    program_path: program_path,
+    ok: r.exit_code == 0,
+    class: classify_output(r.exit_code, r.stdout, r.stderr),
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr
+  } in
+  { result: record, receipt: hash.sha256_text(json.canonicalize(record)) }
+}
+
+fn run_js_check(program_path) {
+  let r = process.capture("node", ["--check", program_path]) in
+  let record = {
+    mode: "js_check",
+    program_path: program_path,
+    ok: r.exit_code == 0,
+    class: classify_output(r.exit_code, r.stdout, r.stderr),
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr
+  } in
+  { result: record, receipt: hash.sha256_text(json.canonicalize(record)) }
+}
+
+fn verify_candidate_lang(source, candidate_path, out_dir, lang) {
+  let written = write_candidate(candidate_path, source) in
+  let check =
+    if lang == "fard" then run_program(candidate_path, out_dir)
+    else if lang == "python" then run_python_check(candidate_path)
+    else if lang == "rust" then run_rust_check(candidate_path)
+    else if lang == "javascript" then run_js_check(candidate_path)
+    else {
+      result: {
+        mode: "unknown_check",
+        program_path: candidate_path,
+        ok: false,
+        class: "unknown_language",
+        exit_code: -1,
+        stdout: "",
+        stderr: ""
+      },
+      receipt: "sha256:unknown_language"
+    } in
+
+  let verify_r = if lang == "fard" && check.result.ok then verify_run_out(out_dir) else {
+    result: {
+      mode: "verify",
+      out_dir: out_dir,
+      ok: check.result.ok,
+      class: if check.result.ok then "syntax_verified" else "not_run",
+      exit_code: check.result.exit_code,
+      stdout: "",
+      stderr: ""
+    },
+    receipt: hash.sha256_text(json.canonicalize({
+      lang: lang,
+      candidate_path: candidate_path,
+      ok: check.result.ok,
+      class: if check.result.ok then "syntax_verified" else "not_run"
+    }))
+  } in
+
+  let record = {
+    lang: lang,
+    written: written,
+    check: check,
+    verify: verify_r,
+    accepted: check.result.ok && verify_r.result.ok,
+    class: if check.result.ok then verify_r.result.class else check.result.class
+  } in
+  { result: record, receipt: hash.sha256_text(json.canonicalize(record)) }
+}
+
+export { classify_output, run_program, test_program, verify_run_out, write_candidate, verify_candidate, run_python_check, run_rust_check, run_js_check, verify_candidate_lang }
