@@ -1,0 +1,3 @@
+import("std/http") as http
+import("std/type") as type
+{ http_type: type.of(http) }

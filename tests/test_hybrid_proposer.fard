@@ -1,0 +1,35 @@
+import("std/list") as list
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_code/hybrid_proposer") as hp
+
+test "make_prompt python" {
+  let p = hp.make_prompt("add two numbers", "python") in
+  str.contains(p, "Python") && str.contains(p, "add two numbers")
+}
+
+test "make_prompt rust" {
+  let p = hp.make_prompt("add two numbers", "rust") in
+  str.contains(p, "Rust")
+}
+
+test "make_prompt js" {
+  let p = hp.make_prompt("add two numbers", "javascript") in
+  str.contains(p, "JavaScript")
+}
+
+test "strip_code_fences removes backticks" {
+  let code = "```python\ndef foo():\n    pass\n```" in
+  let stripped = hp.strip_code_fences(code) in
+  str.contains(stripped, "```") == false
+}
+
+test "strip_code_fences preserves code" {
+  let code = "```python\ndef foo():\n    pass\n```" in
+  let stripped = hp.strip_code_fences(code) in
+  str.contains(stripped, "def foo")
+}
+
+test "extract_content type" {
+  type.of(hp.make_prompt("test", "fard")) == "text"
+}

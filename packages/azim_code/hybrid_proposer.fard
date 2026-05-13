@@ -1,0 +1,99 @@
+import("std/http") as http
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("std/path") as path
+import("verifier") as verifier
+
+fn make_prompt(task, lang) {
+  let lang_hint =
+    if lang == "python" then "Write a Python function. Return only code, no explanation."
+    else if lang == "rust" then "Write a Rust function. Return only code, no explanation."
+    else if lang == "javascript" then "Write a JavaScript function. Return only code, no explanation."
+    else "Write a FARD expression. Return only code, no explanation." in
+  str.concat([lang_hint, "\n\nTask: ", task])
+}
+
+fn call_llm(prompt, api_url, api_key, model) {
+  let body = json.canonicalize({
+    model: model,
+    max_tokens: 256,
+    messages: [{ role: "user", content: prompt }]
+  }) in
+  let response = http.post(api_url, body, {
+    content_type: "application/json",
+    authorization: str.concat(["Bearer ", api_key])
+  }) in
+  response
+}
+
+fn extract_content(response_body) {
+  let d = json.decode(response_body) in
+  let choices = d.choices in
+  if list.len(choices) == 0 then "" else
+  let first = list.get(choices, 0) in
+  first.message.content
+}
+
+fn strip_code_fences(text) {
+  let lines = str.split(text, "\n") in
+  let filtered = list.filter(lines, fn(line) {
+    let t = str.trim(line) in
+    !str.starts_with(t, "```")
+  }) in
+  str.join(filtered, "\n")
+}
+
+fn propose_and_verify(task, lang, candidate_dir, run_dir, api_url, api_key, model) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+  let prompt = make_prompt(task, lang) in
+  let prompt_sha = hash.sha256_text(prompt) in
+  let response = call_llm(prompt, api_url, api_key, model) in
+  let proposal_receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_code.hybrid_proposer",
+    version: "1.0.0",
+    prompt_sha: prompt_sha,
+    status: response.status
+  })) in
+  if response.status != 200 then {
+    ok: false,
+    accepted: false,
+    class: "llm_error",
+    status: response.status,
+    proposal_receipt: proposal_receipt
+  } else
+  let raw_code = extract_content(response.body) in
+  let code = strip_code_fences(raw_code) in
+  let ext = if lang == "python" then ".py"
+    else if lang == "rust" then ".rs"
+    else if lang == "javascript" then ".js"
+    else ".fard" in
+  let cpath = path.join(candidate_dir, str.concat(["candidate", ext])) in
+  let verified = verifier.verify_candidate_lang(code, cpath, run_dir, lang) in
+  let record = {
+    component: "azim_code.hybrid_proposer",
+    version: "1.0.0",
+    task: task,
+    lang: lang,
+    prompt_sha: prompt_sha,
+    code_sha: hash.sha256_text(code),
+    proposal_receipt: proposal_receipt,
+    verification_receipt: verified.receipt,
+    accepted: verified.result.accepted,
+    class: verified.result.class
+  } in
+  {
+    ok: true,
+    accepted: verified.result.accepted,
+    class: verified.result.class,
+    code: code,
+    lang: lang,
+    receipt: hash.sha256_text(json.canonicalize(record)),
+    record: record
+  }
+}
+
+export { make_prompt, extract_content, strip_code_fences, propose_and_verify }

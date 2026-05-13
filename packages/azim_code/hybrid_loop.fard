@@ -1,0 +1,65 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/fs") as fs
+import("hybrid_proposer") as proposer
+import("accepted_dataset") as ads
+import("../azim_trial/lm_head") as lm
+import("../azim_trial/lm_train") as lmt
+import("../azim_trial/tensor") as tensor
+
+fn run_hybrid_loop(tasks, langs, candidate_dir, run_dir, dataset_dir,
+                   api_url, api_key, model, lr, epsilon, steps_per_record) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+  let _ = fs.make_dir(dataset_dir) in
+
+  let proposals = list.map(list.range(0, list.len(tasks)), fn(i) {
+    let task = list.get(tasks, i) in
+    let lang = list.get(langs, i % list.len(langs)) in
+    let cdir = str.concat([candidate_dir, "/", str.from(i)]) in
+    let rdir = str.concat([run_dir, "/", str.from(i)]) in
+    proposer.propose_and_verify(task, lang, cdir, rdir, api_url, api_key, model)
+  }) in
+
+  let accepted = list.filter(proposals, fn(p) { p.accepted }) in
+  let rejected = list.filter(proposals, fn(p) { !p.accepted }) in
+
+  let accepted_texts = list.map(accepted, fn(p) { p.code }) in
+  let trained = list.fold(accepted_texts,
+    { W: lm.W_U_lm, steps: 0, losses: [] },
+    fn(acc, text) {
+      let result = list.fold(list.range(0, steps_per_record), acc, fn(a, step) {
+        let s = lmt.lm_train_step(a.W, text, lr, epsilon) in
+        { W: s.W_U_lm, steps: a.steps + 1, losses: list.append(a.losses, s.loss_before) }
+      }) in
+      result
+    }) in
+
+  let avg_loss = if list.len(trained.losses) == 0 then 0.0 else
+    list.fold(trained.losses, 0.0, fn(a, x) { a + x }) / list.len(trained.losses) in
+
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_code.hybrid_loop",
+    version: "1.0.0",
+    total: list.len(proposals),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    total_steps: trained.steps,
+    avg_loss: avg_loss
+  })) in
+
+  {
+    ok: true,
+    total: list.len(proposals),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    total_steps: trained.steps,
+    avg_loss: avg_loss,
+    receipt: receipt,
+    proposals: proposals
+  }
+}
+
+export { run_hybrid_loop }
