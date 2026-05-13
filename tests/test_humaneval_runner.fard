@@ -1,0 +1,43 @@
+import("std/type") as type
+import("../packages/azim_code/humaneval_runner") as he
+
+fn problem_0() {
+  {
+    task_id: "HumanEval/0",
+    entry_point: "has_close_elements",
+    prompt: "from typing import List\n\ndef has_close_elements(numbers: List[float], threshold: float) -> bool:\n",
+    tests: "def check(candidate):\n    assert candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.3) == True\n    assert candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.05) == False\ncheck(has_close_elements)\n"
+  }
+}
+
+fn correct_solution() {
+  "    for i in range(len(numbers)):\n        for j in range(i+1, len(numbers)):\n            if abs(numbers[i] - numbers[j]) < threshold:\n                return True\n    return False\n"
+}
+
+fn wrong_solution() {
+  "    return False\n"
+}
+
+test "correct solution passes" {
+  let r = he.run_problem(problem_0(), correct_solution(), "out/humaneval_test/correct") in
+  r.result.passed
+}
+
+test "wrong solution fails" {
+  let r = he.run_problem(problem_0(), wrong_solution(), "out/humaneval_test/wrong") in
+  r.result.passed == false
+}
+
+test "result has receipt" {
+  let r = he.run_problem(problem_0(), correct_solution(), "out/humaneval_test/receipt") in
+  type.of(r.receipt) == "text"
+}
+
+test "suite pass rate 1.0" {
+  let r = he.run_suite(
+    [problem_0()],
+    fn(_) { correct_solution() },
+    "out/humaneval_test/suite"
+  ) in
+  r.pass_rate == 1.0
+}

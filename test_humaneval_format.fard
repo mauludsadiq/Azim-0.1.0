@@ -1,0 +1,11 @@
+import("std/json") as json
+import("std/str") as str
+
+let problem_0 = {
+  task_id: "HumanEval/0",
+  prompt: "from typing import List\n\ndef has_close_elements(numbers: List[float], threshold: float) -> bool:\n    \"\"\" Check if in given list of numbers, are any two numbers closer to each other than\n    given threshold.\n    >>> has_close_elements([1.0, 2.0, 3.0], 0.5)\n    False\n    >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)\n    True\n    \"\"\"\n",
+  test: "def check(candidate):\n    assert candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.3) == True\n    assert candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.05) == False\n    assert candidate([1.0, 2.0, 5.9, 4.0, 5.0, 2.2], 0.95) == True\ncheck(has_close_elements)\n",
+  entry_point: "has_close_elements"
+}
+
+{ task_id: problem_0.task_id, prompt_len: str.len(problem_0.prompt) }

@@ -1,0 +1,69 @@
+import("std/process") as process
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+
+fn run_problem(problem, candidate_solution, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let full_source = str.concat([problem.prompt, candidate_solution, "\n\n", problem.tests]) in
+  let candidate_path = path.join(out_dir, str.concat([problem.entry_point, ".py"])) in
+  let _ = fs.write_text(candidate_path, full_source) in
+  let r = process.capture("python3", [candidate_path]) in
+  let passed = r.exit_code == 0 in
+  let record = {
+    component: "azim_code.humaneval_runner",
+    version: "1.0.0",
+    task_id: problem.task_id,
+    entry_point: problem.entry_point,
+    candidate_path: candidate_path,
+    passed: passed,
+    exit_code: r.exit_code,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    stdout_sha256: hash.sha256_text(r.stdout),
+    stderr_sha256: hash.sha256_text(r.stderr),
+    source_sha256: hash.sha256_text(full_source),
+    candidate_sha256: hash.sha256_text(candidate_solution)
+  } in
+  let receipt = hash.sha256_text(json.canonicalize(record)) in
+  let _w = fs.write_text(path.join(out_dir, "result.json"),
+    json.canonicalize({ result: record, receipt: receipt })) in
+  { result: record, receipt: receipt }
+}
+
+fn run_suite(problems, candidate_fn, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let results = list.map(problems, fn(p) {
+    let candidate = candidate_fn(p.prompt) in
+    let pdir = path.join(out_dir, str.replace(p.task_id, "/", "_")) in
+    run_problem(p, candidate, pdir)
+  }) in
+  let passed = list.filter(results, fn(r) { r.result.passed }) in
+  let total = list.len(results) in
+  let pass_count = list.len(passed) in
+  let pass_rate = if total == 0 then 0.0 else (pass_count + 0.0) / (total + 0.0) in
+  let summary = {
+    component: "azim_code.humaneval_runner.suite",
+    version: "1.0.0",
+    total: total,
+    passed: pass_count,
+    failed: total - pass_count,
+    pass_rate: pass_rate,
+    results: results
+  } in
+  let receipt = hash.sha256_text(json.canonicalize(summary)) in
+  let _w = fs.write_text(path.join(out_dir, "suite_result.json"),
+    json.canonicalize({ summary: summary, receipt: receipt })) in
+  {
+    total: total,
+    passed: pass_count,
+    failed: total - pass_count,
+    pass_rate: pass_rate,
+    receipt: receipt
+  }
+}
+
+export { run_problem, run_suite }
