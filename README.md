@@ -2,7 +2,7 @@
 
 Deterministic distributed AI training on FARD.
 
-Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 13,286 lines of code.
+Azim is a training system built on deterministic execution, cryptographic receipts, replay-verifiable distributed computation, validator-supervised optimization, and lawful output constraints. Pure FARD — no Python, no external ML libraries, 13,401 lines of code.
 
 -----
 
@@ -43,30 +43,30 @@ Gate:    PASS every iteration
 
 ## Status
 
-|Milestone                                         |Status|
-|--------------------------------------------------|------|
-|Deterministic runtime (FARD)                      |done  |
-|Cryptographic receipt chain                       |done  |
-|Real gradient descent (SPSA)                      |done  |
-|Full OWT training run (classifier)                |done  |
-|Neural path authoritative                         |done  |
-|Next-token prediction + generation                |done  |
-|linalg native ops (28x speedup)                   |done  |
-|Structural tokenizer — multi-language (155 tokens)|done  |
-|BPE tokenizer (500 merges, vocab 600)             |done  |
-|Verifier-gated self-training loop                 |done  |
-|Scale gate                                        |done  |
-|LM run on OWT (80 shards)                         |done  |
-|Architecture expansion (d_model=32, n_layers=2)   |done  |
-|Blockwise SPSA — all weights simultaneously       |done  |
-|Multi-direction SPSA                              |done  |
-|Generation evaluation suite                       |done  |
-|Deterministic samplers (greedy, top-k, top-p)     |done  |
-|Product interface (CLI)                           |done  |
-|Public benchmark pack                             |done  |
-|Multi-language corpus (Python, Rust, JS, FARD)    |done  |
-|Train at scale (cloud GPU)                        |next  |
-|Hybrid orchestration                              |next  |
+|Milestone                                       |Status|
+|------------------------------------------------|------|
+|Deterministic runtime (FARD)                    |done  |
+|Cryptographic receipt chain                     |done  |
+|Real gradient descent (SPSA)                    |done  |
+|Full OWT training run (classifier)              |done  |
+|Neural path authoritative                       |done  |
+|Next-token prediction + generation              |done  |
+|linalg native ops (28x speedup)                 |done  |
+|Multi-language structural tokenizer (155 tokens)|done  |
+|BPE tokenizer (500 merges, vocab 600)           |done  |
+|Verifier-gated self-training loop               |done  |
+|Scale gate                                      |done  |
+|LM run on OWT (80 shards)                       |done  |
+|Architecture expansion (d_model=32, n_layers=2) |done  |
+|Blockwise SPSA — all weights simultaneously     |done  |
+|Multi-direction SPSA                            |done  |
+|Generation evaluation suite                     |done  |
+|Deterministic samplers (greedy, top-k, top-p)   |done  |
+|Product interface (CLI)                         |done  |
+|Public benchmark pack                           |done  |
+|Multi-language verifier (Python, Rust, JS, FARD)|done  |
+|Train at scale (cloud GPU)                      |next  |
+|Hybrid orchestration                            |next  |
 
 -----
 
@@ -84,37 +84,34 @@ help
 
 -----
 
+## Multi-Language Verifier
+
+Azim verifies code candidates in any language using the actual compiler or interpreter:
+
+```
+FARD:       fardrun run   — executes and verifies receipts
+Python:     python3 -m py_compile   — syntax check
+Rust:       rustc --edition=2021 --crate-type=lib   — compile check
+JavaScript: node --check   — syntax check
+```
+
+Each verification produces a SHA-256 receipt over the execution result. The full chain — source SHA → execution → receipt — is preserved for every candidate in every language.
+
+-----
+
 ## Tokenizers
 
-**azim_code/tokenizer.fard v2.0.0** — 155-token structural tokenizer. Language-agnostic. Handles:
+**azim_code/tokenizer.fard v2.0.0** — 155-token structural tokenizer. Language-agnostic.
 
 - **FARD**: let, fn, if, then, else, import, export, match…
 - **Python**: def, class, lambda, yield, async, await, except, finally, None, True, False…
 - **Rust**: struct, enum, impl, trait, mut, pub, crate, unsafe, dyn, loop…
 - **JavaScript**: const, var, function, typeof, instanceof, async, await, of…
-- **All**: operators, identifiers, integers, floats, strings, backtick strings, comments (// # /* */), whitespace
+- **All**: operators, identifiers, integers, floats, strings, comments (// # /* */), whitespace
 
-Every tokenization receipted. Language detected from file extension and tagged in corpus records.
+Every tokenization receipted. Language detected from file extension. Tagged in corpus records.
 
-**azim_trial/tokenizer.fard** — 129-token character-level. Used for OWT training runs.
-
-**azim_trial/bpe_train.fard + bpe_encode.fard** — Learned BPE. 500 merges. 600-token vocabulary. Real English subwords.
-
------
-
-## What Azim Does
-
-Azim trains a language model on real data with a closed verifier-gated self-improvement loop. Every training step is cryptographically receipted. Every scale decision is gated on evidence.
-
-**OWT Pipeline** — trains on real web text via OpenWebText.
-
-**Azim-Code Pipeline** — trains on verified source code:
-
-- Multi-language corpus: FARD, Python, Rust, JavaScript
-- Language-tagged records for per-language training signal
-- Generates, executes, verifies, accepts candidates
-- Full audit chain from source SHA to trained weights
-- Scale gate enforces cryptographic evidence before scale-up
+**azim_trial/bpe_train.fard + bpe_encode.fard** — Learned BPE. 500 merges. 600-token vocabulary.
 
 -----
 
@@ -141,19 +138,17 @@ Blockwise multi-direction SPSA. K directions per weight matrix. Gradients averag
 ```
 fardrun run --program run_benchmark.fard --out out/benchmark
 
-determinism:  PASS  (same checkpoint + prompt = same output)
-receipt:      PASS  (SHA-256 receipt present and valid)
-diversity:    PASS  (top-k generates diverse outputs)
-integrity:    PASS  (checkpoint dims/data/loss valid)
+determinism:  PASS
+receipt:      PASS
+diversity:    PASS
+integrity:    PASS
 ```
-
-All outputs receipted. Reproducible on any machine with fardrun.
 
 -----
 
 ## Test Coverage
 
-169 test files. 0 failures.
+172 test files. 0 failures.
 
 -----
 
@@ -161,18 +156,37 @@ All outputs receipted. Reproducible on any machine with fardrun.
 
 ```
 packages/azim_trial/         — core LM training system
+  tensor.fard                — native linalg ops
+  linalg_bridge.fard         — float <-> linalg bytes bridge
+  weights_32.fard            — d_model=32, n_layers=2, vocab=600
+  block_32.fard              — 2-layer transformer
+  train_all_weights.fard     — blockwise SPSA all weights
+  spsa_multi.fard            — multi-direction SPSA
+  samplers.fard              — greedy, top-k, top-p
+  generation_v2.fard         — generation with sampling modes
+  generation_eval.fard       — checkpoint evaluation
+  benchmark.fard             — public benchmark suite
+  bpe_train.fard             — BPE trainer
+  bpe_encode.fard            — BPE encoder/decoder
+
 packages/azim_code/          — verifier-gated self-training
   tokenizer.fard             — 155-token multi-language tokenizer
-  lang_detect.fard           — language detection from file extension
+  lang_detect.fard           — language detection
   corpus_packer.fard         — multi-language corpus with lang tags
+  verifier.fard              — multi-language execution verifier
+  generation_wrapper.fard    — generate + verify candidates
+  accepted_dataset.fard      — filter to accepted corpus
+  code_train_adapter.fard    — train on verified code
+  retraining_manifest.fard   — full audit chain
+  scale_gate.fard            — evidence-gated scaling
   loop_run.fard              — full self-training loop
 
 azim.fard                    — CLI entrypoint
-run_benchmark.fard           — benchmark suite entrypoint
-main_lm.fard                 — OWT training entrypoint
+run_benchmark.fard           — benchmark suite
+main_lm.fard                 — OWT training
 
 tests/
-  test_*.fard  (169 files)
+  test_*.fard  (172 files)
 ```
 
 -----
