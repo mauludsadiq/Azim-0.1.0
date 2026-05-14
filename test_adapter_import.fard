@@ -1,0 +1,2 @@
+import("packages/azim_code/code_train_adapter") as train
+{ ok: true }

@@ -1,0 +1,21 @@
+import("std/fs") as fs
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("packages/azim_trial/lm_head") as lm
+import("packages/azim_trial/lm_train") as lmt
+
+fn non_empty_lines(text) {
+  list.filter(str.split(text, "\n"), fn(l) { str.len(str.trim(l)) > 0 })
+}
+
+let records = list.map(
+  non_empty_lines(fs.read_text("out/github_corpus/full/train_shard.jsonl")),
+  fn(line) { json.decode(line) }
+)
+
+list.fold(list.take(records, 5), 0, fn(acc, record) {
+  let ids = record.tokens in
+  if list.len(ids) < 3 then acc else
+  acc + 1
+})

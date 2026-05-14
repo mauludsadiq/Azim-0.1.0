@@ -1,0 +1,11 @@
+# run: all day
+import("packages/azim_code/code_train_adapter") as train
+
+train.train_shard(
+  "out/github_corpus/full/train_shard_129.jsonl",
+  "out/multilang_training",
+  0.0005,
+  0.0001,
+  44,
+  50
+)

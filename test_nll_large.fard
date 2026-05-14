@@ -1,0 +1,6 @@
+import("packages/azim_trial/lm_train") as lmt
+import("packages/azim_trial/lm_head") as lm
+import("std/list") as list
+
+let ids = list.build(552, fn(i) { (i % 128) + 1 })
+lmt.nll_at_pos(lm.W_U_lm, ids, 1)

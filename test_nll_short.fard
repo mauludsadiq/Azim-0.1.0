@@ -1,0 +1,5 @@
+import("packages/azim_trial/lm_train") as lmt
+import("packages/azim_trial/lm_head") as lm
+
+let ids = [5, 2, 3]
+lmt.nll_at_pos(lm.W_U_lm, ids, 0)
