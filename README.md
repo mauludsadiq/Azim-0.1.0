@@ -28,40 +28,62 @@ Final loss:   4.1237  (-0.74 vs random)
 Below random: 47/80 shards
 ```
 
-GitHub corpus: 44 verified executable files, 14,571 tokens, trained 132 steps.
+Multi-language code training. 44 verified executable files. 4,400 steps. Compounding.
+
+```
+Round 1:  loss 4.6955 → 4.6914  (2,200 steps, 5.5 hours)
+Round 2:  loss 2.9279 → 2.9250  (4,400 steps total)
+Delta:    -0.003 per round, compounding across checkpoints
+```
+
+Benchmark suite: 4/4 passing (determinism, receipt, diversity, integrity).
 
 -----
 
 ## Status
 
-|Milestone                                   |Status|
-|--------------------------------------------|------|
-|Deterministic runtime (FARD)                |done  |
-|Cryptographic receipt chain                 |done  |
-|Full OWT training runs                      |done  |
-|linalg native ops (28x speedup)             |done  |
-|Multi-language tokenizer (159 tokens)       |done  |
-|BPE tokenizer (500 merges, vocab 600)       |done  |
-|Verifier-gated self-training loop           |done  |
-|Scale gate with language diversity          |done  |
-|Architecture (d_model=32, n_layers=2)       |done  |
-|Blockwise multi-direction SPSA all weights  |done  |
-|Deterministic samplers                      |done  |
-|CLI + benchmark suite (4/4)                 |done  |
-|Language control tokens                     |done  |
-|Hybrid orchestration                        |done  |
-|Execution verifiers (Python, JS, Rust, FARD)|done  |
-|Unit-test harness                           |done  |
-|HumanEval runner                            |done  |
-|GitHub corpus acquisition                   |done  |
-|Scale to d_model=128 (cloud GPU)            |next  |
-|HumanEval benchmark scores                  |next  |
+|Milestone                                          |Status|
+|---------------------------------------------------|------|
+|Deterministic runtime (FARD)                       |done  |
+|Cryptographic receipt chain                        |done  |
+|Full OWT training runs                             |done  |
+|linalg native ops (28x speedup)                    |done  |
+|Multi-language tokenizer (159 tokens)              |done  |
+|BPE tokenizer (500 merges, vocab 600)              |done  |
+|Verifier-gated self-training loop                  |done  |
+|Scale gate with language diversity                 |done  |
+|Architecture (d_model=32, n_layers=2)              |done  |
+|Blockwise multi-direction SPSA all weights         |done  |
+|Deterministic samplers                             |done  |
+|CLI + benchmark suite (4/4)                        |done  |
+|Language control tokens                            |done  |
+|Hybrid orchestration                               |done  |
+|Execution verifiers (Python, JS, Rust, FARD)       |done  |
+|Unit-test harness                                  |done  |
+|HumanEval runner                                   |done  |
+|GitHub corpus acquisition (44 files, 14,571 tokens)|done  |
+|Multi-language code training (compounding)         |active|
+|Scale to d_model=128 (cloud GPU)                   |next  |
+|HumanEval benchmark scores                         |next  |
 
 -----
 
 ## Phase C — Code as the Primary Signal
 
 The acceptance manifold: generate → execute → test → accept. Only runnable code enters training.
+
+### Corpus
+
+44 verified executable files acquired from GitHub algorithm repos:
+
+```
+TheAlgorithms/Python:          13 accepted, 5,168 tokens
+keon/algorithms:               13 accepted, 4,757 tokens
+TheAlgorithms/JavaScript:       9 accepted, 4,300 tokens
+interactive-coding-challenges:  9 accepted,   346 tokens
+```
+
+Every file executed and verified before entering the corpus. Language control token prepended to every record. Receipted JSONL shard.
 
 ### Execution Verifiers
 
@@ -72,38 +94,11 @@ Rust:       rustc + run binary         — stdout/stderr receipted
 FARD:       fardrun run + receipt chain — full receipt verification
 ```
 
-### Unit-Test Harness
-
-```
-run_python_with_tests(source, tests)   — correct code passes, wrong code fails
-run_js_with_tests(source, tests)       — same pattern
-run_rust_with_tests(source, tests)     — #[cfg(test)] integration
-```
-
 ### HumanEval Runner
 
 ```
-run_problem(problem, candidate)        — pass/fail + receipt
-run_suite(problems, candidate_fn)      — pass_rate across 164 problems
-```
-
-### GitHub Corpus Acquisition
-
-```
-github_search(lang, min_stars)         — find repos via API
-github_tree(owner, repo)               — list files
-fetch_raw(owner, repo, path)           — fetch content
-acquire_and_pack(owner, repo, ...)     — fetch → execute → accept → JSONL
-```
-
-Acquired from algorithm repos (self-contained, no external deps):
-
-```
-TheAlgorithms/Python:          13 accepted, 5,168 tokens
-keon/algorithms:               13 accepted, 4,757 tokens
-TheAlgorithms/JavaScript:       9 accepted, 4,300 tokens
-interactive-coding-challenges:  9 accepted,   346 tokens
-Total: 44 files, 14,571 tokens, receipted shard
+run_problem(problem, candidate)     — pass/fail + receipt
+run_suite(problems, candidate_fn)   — pass_rate across 164 problems
 ```
 
 -----
@@ -117,6 +112,8 @@ Total: 44 files, 14,571 tokens, receipted shard
 |A3   |85M   |~500     |GPT-2 small equivalent               |
 
 Total compute: ~1,050 A100-hours, ~$1,575.
+
+LTFF application submitted. Awaiting response.
 
 -----
 
@@ -132,7 +129,7 @@ fardrun run --program run_benchmark.fard --out out/benchmark
 ## Architecture
 
 ```
-d_model: 32, n_layers: 2, vocab: 600 (BPE), params: ~50,000
+d_model: 32, n_layers: 2, vocab: 129 (character-level), params: ~50,000
 Blockwise multi-direction SPSA — all weights — deterministic — receipted
 ```
 
@@ -153,6 +150,7 @@ packages/azim_code/
   test_harness.fard          — unit-test runner
   humaneval_runner.fard      — HumanEval pass/fail with receipts
   corpus_acquire.fard        — GitHub corpus acquisition
+  code_train_adapter.fard    — train on verified code corpus
   tokenizer.fard             — 159-token multi-language tokenizer
   lang_detect.fard           — language detection
   corpus_packer.fard         — corpus with language control tokens
@@ -165,11 +163,14 @@ packages/azim_code/
 azim.fard                    — CLI
 run_benchmark.fard           — benchmark suite
 main_lm.fard                 — OWT training
-build_corpus_v2.fard         — GitHub corpus acquisition
-pack_full_corpus.fard        — merge shards
+train_multilang_all_day.fard — multi-language code training
 
 tests/
   test_*.fard  (191 files)
+
+out/github_corpus/full/
+  train_shard_129.jsonl      — 44 records, vocab-aligned
+  code_checkpoint.json       — training checkpoint (4,400 steps)
 ```
 
 -----
