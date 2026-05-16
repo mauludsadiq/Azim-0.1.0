@@ -1,0 +1,15 @@
+# owt round 1
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("packages/azim_trial/lm_owt_train") as owt
+import("packages/azim_trial/tensor") as tensor
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+let W = load_W("out/multilang_training/code_checkpoint.json")
+
+owt.train_shard(0, W, 0.0005, 0.0001, 5, 3)

@@ -1,0 +1,30 @@
+import("std/json") as json
+import("std/fs") as fs
+import("std/list") as list
+import("packages/azim_trial/lm_train") as lmt
+import("packages/azim_trial/tensor") as tensor
+
+fn load_W(path) {
+  let d = json.decode(fs.read_text(path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+fn tokenize_simple(text) {
+  let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,(){}[]+-*/=<>!:;_\n\"'" in
+  list.map(list.range(0, 20), fn(i) {
+    if i >= 0 then i + 2 else 0
+  })
+}
+
+let W_code = load_W("out/multilang_training/code_checkpoint.json")
+let W_owt  = load_W("out/lm_checkpoints2/shard_79.json")
+
+let python_tokens = [2, 36, 27, 33, 10, 29, 27, 19, 10, 40, 3]
+let random_tokens = [50, 80, 110, 30, 70, 20, 90, 40, 100, 60, 3]
+
+{
+  code_W_on_python: lmt.nll_at_pos(W_code, python_tokens, 3),
+  code_W_on_random: lmt.nll_at_pos(W_code, random_tokens, 3),
+  owt_W_on_python:  lmt.nll_at_pos(W_owt,  python_tokens, 3),
+  owt_W_on_random:  lmt.nll_at_pos(W_owt,  random_tokens, 3)
+}
