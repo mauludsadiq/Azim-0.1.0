@@ -1,0 +1,38 @@
+import("std/fs") as fs
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("std/path") as path
+import("packages/azim_trial/tokenizer") as tok
+
+fn non_empty_lines(text) {
+  list.filter(str.split(text, "\n"), fn(l) { str.len(str.trim(l)) > 0 })
+}
+
+let fard_lines = non_empty_lines(fs.read_text("out/fard_corpus/train_shard_000.jsonl"))
+
+let repacked = list.map(fard_lines, fn(line) {
+  let r = json.decode(line) in
+  let src = fs.read_text(r.path) in
+  let tokens = tok.tokenize(src) in
+  {
+    kind: r.kind,
+    lang: "fard",
+    path: r.path,
+    source_sha256: hash.sha256_text(src),
+    token_count: list.len(tokens),
+    tokens: tokens
+  }
+})
+
+let payload = str.join(list.map(repacked, fn(r) { json.canonicalize(r) }), "\n")
+let _ = fs.make_dir("out/fard_corpus_129")
+let _ = fs.write_text("out/fard_corpus_129/train_shard.jsonl", payload)
+
+{
+  ok: true,
+  records: list.len(repacked),
+  total_tokens: list.fold(repacked, 0, fn(a, r) { a + r.token_count }),
+  shard_sha256: hash.sha256_text(payload)
+}
