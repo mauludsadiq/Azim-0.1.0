@@ -1,4 +1,4 @@
-# run: full corpus round 2
+# run: full corpus round 3
 import("packages/azim_code/code_train_adapter") as train
 
 train.train_shard(
