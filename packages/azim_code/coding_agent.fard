@@ -12,12 +12,20 @@ fn call_llm(prompt, api_url, api_key, model) {
  let body = json.canonicalize({
    model: model,
    max_tokens: 512,
-   messages: [{ role: "user", content: prompt }]
+   messages: [
+      { role: "system", content: "You are a code generator. Output ONLY executable code with no explanations, no prose, no markdown fences. Just raw code that can be executed directly." },
+      { role: "user", content: prompt }
+    ]
  }) in
- let response = http.post(api_url, body, {
-   content_type: "application/json",
-   authorization: str.concat(["Bearer ", api_key])
- }) in
+  let response = http.request({
+    method: "POST",
+    url: api_url,
+    body: body,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": str.concat(["Bearer ", api_key])
+    }
+  }) in
  if response.status != 200 then { ok: false, content: "", status: response.status }
  else
    let d = json.decode(response.body) in

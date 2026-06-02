@@ -19,7 +19,7 @@ fn make_task_prompt(task, lang, examples) {
         str.concat(["# ", e.input, " -> ", e.output])
       }), "\n"),
       "\n"]) in
-  str.concat([lang_hint, "# Task: ", task, example_str, "\n"])
+  str.concat([lang_hint, "# Task: ", task, example_str, "\n# IMPORTANT: Return ONLY executable code. No explanations, no prose, no markdown. Just the code.\n"])
 }
 
 fn attempt_task(task, lang, candidate_source, candidate_dir, run_dir, attempt_index) {

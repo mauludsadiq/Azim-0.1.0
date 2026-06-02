@@ -1,0 +1,19 @@
+import("std/fs") as fs
+import("std/str") as str
+import("packages/azim_code/coding_agent") as agent
+
+let key = str.trim(fs.read_text(".openai_key"))
+
+agent.run_agent(
+  "write a python function called add that takes two numbers and returns their sum, then print add(2, 3)",
+  "python",
+  3,
+  "out/agent_live/candidates",
+  "out/agent_live/runs",
+  "https://api.openai.com/v1/chat/completions",
+  key,
+  "gpt-4o-mini"
+)
+# v2
+# v3
+# v4

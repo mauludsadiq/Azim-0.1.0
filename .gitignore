@@ -5,3 +5,8 @@ packages/azim_trial/model_probe.fard
 packages/azim_trial/weights.fard:*
 tests/test_probe_*.fard
 tests/test_model.fard:*
+.openai_key
+test_gemini_*.fard
+test_http_*.fard
+test_openai_*.fard
+test_json_body.fard
