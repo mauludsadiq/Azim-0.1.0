@@ -1,0 +1,26 @@
+import("std/str") as str
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_code/coding_agent") as agent
+
+test "strip_fences removes backticks" {
+  let code = "```python\nprint(42)\n```" in
+  let stripped = agent.strip_fences(code) in
+  str.contains(stripped, "```") == false && str.contains(stripped, "print(42)")
+}
+
+test "strip_fences preserves plain code" {
+  agent.strip_fences("print(42)") == "print(42)"
+}
+
+test "strip_fences handles rust fences" {
+  let code = "```rust\nfn main() { println!(\"42\"); }\n```" in
+  let stripped = agent.strip_fences(code) in
+  str.contains(stripped, "fn main")
+}
+
+test "strip_fences with language tag" {
+  let code = "```javascript\nconsole.log(42);\n```" in
+  let stripped = agent.strip_fences(code) in
+  str.contains(stripped, "console.log")
+}

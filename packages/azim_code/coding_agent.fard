@@ -1,0 +1,98 @@
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("std/fs") as fs
+import("std/path") as path
+import("std/http") as http
+import("task_generator") as tg
+import("verifier") as verifier
+
+fn call_llm(prompt, api_url, api_key, model) {
+ let body = json.canonicalize({
+   model: model,
+   max_tokens: 512,
+   messages: [{ role: "user", content: prompt }]
+ }) in
+ let response = http.post(api_url, body, {
+   content_type: "application/json",
+   authorization: str.concat(["Bearer ", api_key])
+ }) in
+ if response.status != 200 then { ok: false, content: "", status: response.status }
+ else
+   let d = json.decode(response.body) in
+   let choices = d.choices in
+   if list.len(choices) == 0 then { ok: false, content: "", status: 200 }
+   else { ok: true, content: list.get(choices, 0).message.content, status: 200 }
+}
+
+fn strip_fences(text) {
+ let lines = str.split(text, "\n") in
+ let filtered = list.filter(lines, fn(l) {
+   let t = str.trim(l) in
+   !str.starts_with(t, "```")
+ }) in
+ str.join(filtered, "\n")
+}
+
+fn run_agent(task, lang, max_attempts, candidate_dir, run_dir, api_url, api_key, model) {
+ let _ = fs.make_dir(candidate_dir) in
+ let _ = fs.make_dir(run_dir) in
+
+ let init_prompt = tg.make_task_prompt(task, lang, []) in
+
+ let result = list.fold(list.range(0, max_attempts),
+   { attempts: [], accepted: false, accepted_source: "", accepted_index: -1, last_prompt: init_prompt, last_source: "", last_stderr: "" },
+   fn(acc, i) {
+     if acc.accepted then acc else
+     let llm_result = call_llm(acc.last_prompt, api_url, api_key, model) in
+     if !llm_result.ok then acc else
+     let source = strip_fences(llm_result.content) in
+     let attempt = tg.attempt_task(task, lang, source, candidate_dir, run_dir, i) in
+     let new_attempts = list.append(acc.attempts, attempt) in
+     if attempt.accepted then {
+       attempts: new_attempts,
+       accepted: true,
+       accepted_source: source,
+       accepted_index: i,
+       last_prompt: acc.last_prompt,
+       last_source: source,
+       last_stderr: ""
+     } else
+     let next_prompt = tg.feedback_prompt(task, lang, source, attempt.stderr, i + 1) in
+     {
+       attempts: new_attempts,
+       accepted: false,
+       accepted_source: "",
+       accepted_index: -1,
+       last_prompt: next_prompt,
+       last_source: source,
+       last_stderr: attempt.stderr
+     }
+   }) in
+
+ let receipt = hash.sha256_text(json.canonicalize({
+   component: "azim_code.coding_agent",
+   version: "1.0.0",
+   task: task,
+   lang: lang,
+   max_attempts: max_attempts,
+   total_attempts: list.len(result.attempts),
+   accepted: result.accepted,
+   accepted_index: result.accepted_index
+ })) in
+
+ {
+   ok: true,
+   task: task,
+   lang: lang,
+   total_attempts: list.len(result.attempts),
+   accepted: result.accepted,
+   accepted_source: result.accepted_source,
+   accepted_index: result.accepted_index,
+   attempts: result.attempts,
+   receipt: receipt
+ }
+}
+
+export { call_llm, strip_fences, run_agent }
