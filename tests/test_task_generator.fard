@@ -1,0 +1,61 @@
+import("std/str") as str
+import("std/list") as list
+import("std/type") as type
+import("../packages/azim_code/task_generator") as tg
+
+test "make_task_prompt python" {
+  let p = tg.make_task_prompt("add two numbers", "python", []) in
+  str.contains(p, "Task: add two numbers") && str.contains(p, "# Python")
+}
+
+test "make_task_prompt with examples" {
+  let p = tg.make_task_prompt("add", "python",
+    [{ input: "add(1,2)", output: "3" }]) in
+  str.contains(p, "Examples")
+}
+
+test "feedback_prompt includes error" {
+  let p = tg.feedback_prompt("add two numbers", "python",
+    "def add(a,b): return a-b", "AssertionError", 1) in
+  str.contains(p, "failed with error") && str.contains(p, "AssertionError")
+}
+
+test "attempt_task python succeeds" {
+  let r = tg.attempt_task(
+    "print 42", "python",
+    "print(42)",
+    "out/test_task/candidates",
+    "out/test_task/runs",
+    0) in
+  r.accepted && r.stdout == "42\n"
+}
+
+test "attempt_task python fails bad code" {
+  let r = tg.attempt_task(
+    "print 42", "python",
+    "this is not python code!!!",
+    "out/test_task/candidates",
+    "out/test_task/runs",
+    1) in
+  r.accepted == false
+}
+
+test "run_with_feedback accepts first working candidate" {
+  let r = tg.run_with_feedback(
+    "print 42", "python",
+    ["this is broken", "print(42)"],
+    "out/test_task/feedback_candidates",
+    "out/test_task/feedback_runs"
+  ) in
+  r.accepted && r.accepted_index == 1
+}
+
+test "receipt is sha256" {
+  let r = tg.run_with_feedback(
+    "print 42", "python",
+    ["print(42)"],
+    "out/test_task/receipt_candidates",
+    "out/test_task/receipt_runs"
+  ) in
+  type.of(r.receipt) == "text"
+}

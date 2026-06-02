@@ -1,0 +1,28 @@
+# rust corpus acquisition v2
+import("std/list") as list
+import("std/str") as str
+import("packages/azim_code/corpus_acquire") as ca
+
+let repos = [
+  { owner: "TheAlgorithms", repo: "Rust" },
+  { owner: "EbTech", repo: "rust-algorithms" },
+  { owner: "weihanglo", repo: "rust-algorithm-club" }
+]
+
+let results = list.map(repos, fn(r) {
+  ca.acquire_and_pack(r.owner, r.repo, 20,
+    str.concat(["out/rust_corpus/", r.repo]))
+})
+
+let total_acc = list.fold(results, 0, fn(a, r) { a + r.accepted_count })
+let total_tok = list.fold(results, 0, fn(a, r) { a + r.total_tokens })
+
+{
+  total_accepted: total_acc,
+  total_tokens: total_tok,
+  results: list.map(list.range(0, list.len(results)), fn(i) {
+    let r = list.get(results, i) in
+    let repo = list.get(repos, i) in
+    { repo: repo.repo, accepted: r.accepted_count, tokens: r.total_tokens }
+  })
+}

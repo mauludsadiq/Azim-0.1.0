@@ -1,0 +1,111 @@
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("std/fs") as fs
+import("std/path") as path
+import("verifier") as verifier
+import("lang_detect") as ld
+
+fn make_task_prompt(task, lang, examples) {
+  let lang_hint =
+    if lang == "python" then "# Python\n"
+    else if lang == "rust" then "// Rust\n"
+    else if lang == "javascript" then "// JavaScript\n"
+    else "# FARD\n" in
+  let example_str = if list.len(examples) == 0 then "" else
+    str.concat(["\n# Examples:\n",
+      str.join(list.map(examples, fn(e) {
+        str.concat(["# ", e.input, " -> ", e.output])
+      }), "\n"),
+      "\n"]) in
+  str.concat([lang_hint, "# Task: ", task, example_str, "\n"])
+}
+
+fn attempt_task(task, lang, candidate_source, candidate_dir, run_dir, attempt_index) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+  let ext = if lang == "python" then ".py"
+    else if lang == "rust" then ".rs"
+    else if lang == "javascript" then ".js"
+    else ".fard" in
+  let cpath = path.join(candidate_dir, str.concat(["attempt_", str.from(attempt_index), ext])) in
+  let rdir = path.join(run_dir, str.concat(["attempt_", str.from(attempt_index)])) in
+  let verified = verifier.execute_candidate_lang(candidate_source, cpath, rdir, lang) in
+  {
+    attempt: attempt_index,
+    task: task,
+    lang: lang,
+    source: candidate_source,
+    accepted: verified.result.ok,
+    exit_code: verified.result.exit_code,
+    stdout: verified.result.stdout,
+    stderr: verified.result.stderr,
+    receipt: verified.receipt
+  }
+}
+
+fn feedback_prompt(task, lang, prev_source, stderr, attempt) {
+  let lang_hint =
+    if lang == "python" then "# Python\n"
+    else if lang == "rust" then "// Rust\n"
+    else if lang == "javascript" then "// JavaScript\n"
+    else "# FARD\n" in
+  str.concat([
+    lang_hint,
+    "# Task: ", task, "\n",
+    "# Attempt ", str.from(attempt), " failed with error:\n",
+    "# ", str.replace(stderr, "\n", "\n# "), "\n",
+    "# Previous code:\n",
+    str.join(list.map(str.split(prev_source, "\n"), fn(l) {
+      str.concat(["# ", l])
+    }), "\n"),
+    "\n# Fixed code:\n"
+  ])
+}
+
+fn run_with_feedback(task, lang, candidates, candidate_dir, run_dir) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+  let n = list.len(candidates) in
+  let result = list.fold(list.range(0, n),
+    { attempts: [], accepted: false, accepted_source: "", accepted_index: -1 },
+    fn(acc, i) {
+      if acc.accepted then acc else
+      let source = list.get(candidates, i) in
+      let attempt = attempt_task(task, lang, source, candidate_dir, run_dir, i) in
+      let new_attempts = list.append(acc.attempts, attempt) in
+      if attempt.accepted then {
+        attempts: new_attempts,
+        accepted: true,
+        accepted_source: source,
+        accepted_index: i
+      } else {
+        attempts: new_attempts,
+        accepted: false,
+        accepted_source: "",
+        accepted_index: -1
+      }
+    }) in
+  let receipt = hash.sha256_text(json.canonicalize({
+    component: "azim_code.task_generator",
+    version: "1.0.0",
+    task: task,
+    lang: lang,
+    total_attempts: list.len(result.attempts),
+    accepted: result.accepted,
+    accepted_index: result.accepted_index
+  })) in
+  {
+    task: task,
+    lang: lang,
+    total_attempts: list.len(result.attempts),
+    accepted: result.accepted,
+    accepted_source: result.accepted_source,
+    accepted_index: result.accepted_index,
+    attempts: result.attempts,
+    receipt: receipt
+  }
+}
+
+export { make_task_prompt, attempt_task, feedback_prompt, run_with_feedback }
