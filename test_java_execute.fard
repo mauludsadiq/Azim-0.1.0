@@ -1,0 +1,7 @@
+import("packages/azim_code/verifier") as v
+
+v.execute_candidate_java(
+  "public class Main { public static void main(String[] args) { System.out.println(6 * 7); } }",
+  "out/test_java/Main.java",
+  "out/test_java/run"
+)

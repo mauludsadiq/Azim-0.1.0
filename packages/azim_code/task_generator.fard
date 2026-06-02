@@ -12,7 +12,8 @@ fn make_task_prompt(task, lang, examples) {
     if lang == "python" then "# Python\n"
     else if lang == "rust" then "// Rust\n"
     else if lang == "javascript" then "// JavaScript\n"
-    else "# FARD\n" in
+    else if lang == "java" then "// Java\n"
+  else "# FARD\n" in
   let example_str = if list.len(examples) == 0 then "" else
     str.concat(["\n# Examples:\n",
       str.join(list.map(examples, fn(e) {
@@ -28,7 +29,8 @@ fn attempt_task(task, lang, candidate_source, candidate_dir, run_dir, attempt_in
   let ext = if lang == "python" then ".py"
     else if lang == "rust" then ".rs"
     else if lang == "javascript" then ".js"
-    else ".fard" in
+    else if lang == "java" then ".java"
+  else ".fard" in
   let cpath = path.join(candidate_dir, str.concat(["attempt_", str.from(attempt_index), ext])) in
   let rdir = path.join(run_dir, str.concat(["attempt_", str.from(attempt_index)])) in
   let verified = verifier.execute_candidate_lang(candidate_source, cpath, rdir, lang) in
@@ -50,7 +52,8 @@ fn feedback_prompt(task, lang, prev_source, stderr, attempt) {
     if lang == "python" then "# Python\n"
     else if lang == "rust" then "// Rust\n"
     else if lang == "javascript" then "// JavaScript\n"
-    else "# FARD\n" in
+    else if lang == "java" then "// Java\n"
+  else "# FARD\n" in
   str.concat([
     lang_hint,
     "# Task: ", task, "\n",

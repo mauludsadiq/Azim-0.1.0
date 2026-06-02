@@ -1,0 +1,16 @@
+import("std/fs") as fs
+import("std/str") as str
+import("packages/azim_code/coding_agent") as agent
+
+let key = str.trim(fs.read_text(".openai_key"))
+
+agent.run_agent(
+  "write a Java class called Main with a main method that prints the sum of 2 and 3",
+  "java",
+  3,
+  "out/agent_java/candidates",
+  "out/agent_java/runs",
+  "https://api.openai.com/v1/chat/completions",
+  key,
+  "gpt-4o-mini"
+)

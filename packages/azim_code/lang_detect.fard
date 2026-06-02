@@ -5,6 +5,7 @@ fn detect(path) {
   else if str.ends_with(path, ".rs") then "rust"
   else if str.ends_with(path, ".js") then "javascript"
   else if str.ends_with(path, ".ts") then "typescript"
+  else if str.ends_with(path, ".java") then "java"
   else if str.ends_with(path, ".fard") then "fard"
   else if str.ends_with(path, ".go") then "go"
   else if str.ends_with(path, ".c") then "c"
