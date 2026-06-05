@@ -1,0 +1,135 @@
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("std/fs") as fs
+import("std/path") as path
+import("std/http") as http
+import("task_generator") as tg
+import("verifier") as verifier
+import("../azim_trial/lm_head") as lm
+import("../azim_trial/generation_v2") as gen
+import("../azim_trial/tensor") as tensor
+
+fn load_W(checkpoint_path) {
+  let d = json.decode(fs.read_text(checkpoint_path)) in
+  tensor.matrix(list.get(d.W_U_lm_dims, 0), list.get(d.W_U_lm_dims, 1), d.W_U_lm_data)
+}
+
+fn azim_propose(task, lang, checkpoint_path, max_tokens, k, temperature) {
+  let W = load_W(checkpoint_path) in
+  let lang_hint =
+    if lang == "python" then "# Task: "
+    else if lang == "rust" then "// Task: "
+    else if lang == "javascript" then "// Task: "
+    else if lang == "java" then "// Task: "
+    else "# Task: " in
+  let prompt = str.concat([lang_hint, task, "\n"]) in
+  gen.generate_top_k(W, prompt, max_tokens, k, temperature)
+}
+
+fn llm_propose(task, lang, api_url, api_key, model) {
+  let prompt = tg.make_task_prompt(task, lang, []) in
+  let body = json.canonicalize({
+    model: model,
+    max_tokens: 512,
+    messages: [
+      { role: "system", content: "You are a code generator. Output ONLY executable code with no explanations, no prose, no markdown fences." },
+      { role: "user", content: prompt }
+    ]
+  }) in
+  let response = http.request({
+    method: "POST",
+    url: api_url,
+    body: body,
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": str.concat(["Bearer ", api_key])
+    }
+  }) in
+  if response.status != 200 then { ok: false, source: "", from: "llm_error" }
+  else
+    let d = json.decode(response.body) in
+    let choices = d.choices in
+    if list.len(choices) == 0 then { ok: false, source: "", from: "llm_empty" }
+    else
+      let raw = list.get(choices, 0).message.content in
+      let source = str.join(list.filter(str.split(raw, "\n"), fn(l) {
+        !str.starts_with(str.trim(l), "```")
+      }), "\n") in
+      { ok: true, source: source, from: "llm" }
+}
+
+fn hybrid_propose_and_verify(task, lang, checkpoint_path, candidate_dir, run_dir,
+                              api_url, api_key, model, max_azim_attempts, max_llm_attempts,
+                              azim_tokens, azim_k, azim_temp) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+
+  let azim_results = list.fold(list.range(0, max_azim_attempts),
+    { attempts: [], accepted: false, accepted_source: "", accepted_from: "", accepted_index: -1 },
+    fn(acc, i) {
+      if acc.accepted then acc else
+      let source = azim_propose(task, lang, checkpoint_path, azim_tokens, azim_k, azim_temp) in
+      let attempt = tg.attempt_task(task, lang, source, candidate_dir, run_dir, i) in
+      let new_attempts = list.append(acc.attempts, {
+        index: i, from: "azim", source: source,
+        accepted: attempt.accepted, stdout: attempt.stdout, stderr: attempt.stderr
+      }) in
+      if attempt.accepted then {
+        attempts: new_attempts, accepted: true,
+        accepted_source: source, accepted_from: "azim", accepted_index: i
+      } else {
+        attempts: new_attempts, accepted: false,
+        accepted_source: "", accepted_from: "", accepted_index: -1
+      }
+    }) in
+
+  if azim_results.accepted then
+    let receipt = hash.sha256_text(json.canonicalize({
+      component: "azim_code.hybrid_proposer_v2",
+      version: "1.0.0",
+      task: task, lang: lang,
+      accepted_from: "azim",
+      accepted_index: azim_results.accepted_index
+    })) in
+    { ok: true, accepted: true, accepted_from: "azim",
+      accepted_source: azim_results.accepted_source,
+      total_attempts: list.len(azim_results.attempts),
+      attempts: azim_results.attempts, receipt: receipt }
+  else
+    let llm_results = list.fold(list.range(0, max_llm_attempts),
+      { attempts: azim_results.attempts, accepted: false, accepted_source: "", accepted_from: "", accepted_index: -1 },
+      fn(acc, i) {
+        if acc.accepted then acc else
+        let proposal = llm_propose(task, lang, api_url, api_key, model) in
+        if !proposal.ok then acc else
+        let attempt_i = list.len(azim_results.attempts) + i in
+        let attempt = tg.attempt_task(task, lang, proposal.source, candidate_dir, run_dir, attempt_i) in
+        let new_attempts = list.append(acc.attempts, {
+          index: attempt_i, from: "llm", source: proposal.source,
+          accepted: attempt.accepted, stdout: attempt.stdout, stderr: attempt.stderr
+        }) in
+        if attempt.accepted then {
+          attempts: new_attempts, accepted: true,
+          accepted_source: proposal.source, accepted_from: "llm", accepted_index: attempt_i
+        } else {
+          attempts: new_attempts, accepted: false,
+          accepted_source: "", accepted_from: "", accepted_index: -1
+        }
+      }) in
+    let receipt = hash.sha256_text(json.canonicalize({
+      component: "azim_code.hybrid_proposer_v2",
+      version: "1.0.0",
+      task: task, lang: lang,
+      accepted_from: llm_results.accepted_from,
+      accepted_index: llm_results.accepted_index
+    })) in
+    { ok: true, accepted: llm_results.accepted,
+      accepted_from: llm_results.accepted_from,
+      accepted_source: llm_results.accepted_source,
+      total_attempts: list.len(llm_results.attempts),
+      attempts: llm_results.attempts, receipt: receipt }
+}
+
+export { azim_propose, llm_propose, hybrid_propose_and_verify }

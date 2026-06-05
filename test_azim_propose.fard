@@ -1,0 +1,10 @@
+import("std/str") as str
+import("packages/azim_code/hybrid_proposer_v2") as hp
+
+let checkpoint = "out/full_corpus_training/code_checkpoint.json"
+
+{
+  python_add: hp.azim_propose("add two numbers", "python", checkpoint, 30, 10, 1.0),
+  python_sort: hp.azim_propose("sort a list", "python", checkpoint, 30, 10, 1.0),
+  fard_fn: hp.azim_propose("write a function", "fard", checkpoint, 30, 10, 1.0)
+}

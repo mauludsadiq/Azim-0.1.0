@@ -1,0 +1,19 @@
+import("std/str") as str
+import("std/type") as type
+import("../packages/azim_code/hybrid_proposer_v2") as hp
+
+test "azim_propose returns text" {
+  let r = hp.azim_propose(
+    "add two numbers", "python",
+    "out/multilang_training/code_checkpoint.json",
+    20, 10, 1.0) in
+  type.of(r) == "text"
+}
+
+test "azim_propose generates something" {
+  let r = hp.azim_propose(
+    "add two numbers", "python",
+    "out/multilang_training/code_checkpoint.json",
+    20, 10, 1.0) in
+  str.len(r) > 0
+}
