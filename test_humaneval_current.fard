@@ -1,0 +1,25 @@
+import("packages/azim_code/humaneval_runner") as he
+import("std/fs") as fs
+import("std/str") as str
+
+let problem_0 = {
+  task_id: "HumanEval/0",
+  entry_point: "has_close_elements",
+  prompt: "from typing import List\n\ndef has_close_elements(numbers: List[float], threshold: float) -> bool:\n",
+  tests: "def check(candidate):\n    assert candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.3) == True\n    assert candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.05) == False\n    assert candidate([1.0, 2.0, 5.9, 4.0, 5.0, 2.2], 0.95) == True\n    assert candidate([1.0, 2.0, 5.9, 4.0, 5.0, 2.2], 0.05) == False\ncheck(has_close_elements)\n"
+}
+
+let problem_1 = {
+  task_id: "HumanEval/1",
+  entry_point: "separate_paren_groups",
+  prompt: "from typing import List\n\ndef separate_paren_groups(paren_string: str) -> List[str]:\n",
+  tests: "def check(candidate):\n    assert candidate('(()()) ((())) () ((())()())') == ['(()())', '((()))', '()', '((())()())']\n    assert candidate('() (()) ((())) (((())))') == ['()', '(())', '((()))', '(((())))']\ncheck(separate_paren_groups)\n"
+}
+
+let problems = [problem_0, problem_1]
+
+he.run_suite(
+  problems,
+  fn(prompt) { "    pass\n" },
+  "out/humaneval_baseline"
+)

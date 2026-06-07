@@ -1,0 +1,11 @@
+# run: with humaneval round 1
+import("packages/azim_code/code_train_adapter") as train
+
+train.train_shard(
+  "out/full_corpus_with_humaneval.jsonl",
+  "out/humaneval_training",
+  0.0005,
+  0.0001,
+  79,
+  50
+)
