@@ -6,9 +6,32 @@ import("std/list") as list
 import("std/json") as json
 import("std/hash") as hash
 
+fn strip_prompt_overlap(prompt, candidate) {
+  let prompt_lines = str.split(prompt, "\n") in
+  let cand_lines = str.split(candidate, "\n") in
+  let cand_filtered = list.filter(cand_lines, fn(line) {
+    let trimmed = str.trim(line) in
+    if str.len(trimmed) == 0 then true else
+    list.all(prompt_lines, fn(pl) { str.trim(pl) != trimmed })
+  }) in
+  str.join(cand_filtered, "\n")
+}
+
+fn normalize_body_indentation(candidate) {
+  let lines = str.split(candidate, "\n") in
+  let normalized = list.map(lines, fn(line) {
+    let trimmed = str.trim(line) in
+    if str.len(trimmed) == 0 then "" else
+    if str.starts_with(line, " ") || str.starts_with(line, "\t") then line else
+    str.concat(["    ", line])
+  }) in
+  str.join(normalized, "\n")
+}
+
 fn run_problem(problem, candidate_solution, out_dir) {
   let _ = fs.make_dir(out_dir) in
-  let full_source = str.concat([problem.prompt, candidate_solution, "\n\n", problem.tests]) in
+  let clean_candidate = normalize_body_indentation(strip_prompt_overlap(problem.prompt, candidate_solution)) in
+  let full_source = str.concat([problem.prompt, clean_candidate, "\n\n", problem.tests]) in
   let candidate_path = path.join(out_dir, str.concat([problem.entry_point, ".py"])) in
   let _ = fs.write_text(candidate_path, full_source) in
   let r = process.capture("python3", [candidate_path]) in
@@ -66,4 +89,4 @@ fn run_suite(problems, candidate_fn, out_dir) {
   }
 }
 
-export { run_problem, run_suite }
+export { strip_prompt_overlap, normalize_body_indentation, run_problem, run_suite }
