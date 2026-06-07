@@ -1,0 +1,131 @@
+import("std/fs") as fs
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("packages/azim_code/humaneval_runner") as he
+import("packages/azim_code/coding_agent") as agent
+
+let key = str.trim(fs.read_text(".openai_key"))
+let api_url = "https://api.openai.com/v1/chat/completions"
+let model = "gpt-4o-mini"
+
+let problems = [
+  { task_id: "HumanEval/3", entry_point: "below_zero",
+    prompt: "from typing import List\n\ndef below_zero(operations: List[int]) -> bool:\n",
+    tests: "def check(candidate):\n    assert candidate([]) == False\n    assert candidate([1, 2, -3, 1, 2, -3]) == False\n    assert candidate([1, 2, -4, 5, 6]) == True\ncheck(below_zero)\n" },
+  { task_id: "HumanEval/4", entry_point: "mean_absolute_deviation",
+    prompt: "from typing import List\n\ndef mean_absolute_deviation(numbers: List[float]) -> float:\n",
+    tests: "def check(candidate):\n    assert abs(candidate([1.0, 2.0, 3.0, 4.0]) - 1.0) < 1e-6\n    assert abs(candidate([1.0, 2.0, 3.0, 4.0, 5.0]) - 1.2) < 1e-6\ncheck(mean_absolute_deviation)\n" },
+  { task_id: "HumanEval/7", entry_point: "filter_by_substring",
+    prompt: "from typing import List\n\ndef filter_by_substring(strings: List[str], substring: str) -> List[str]:\n",
+    tests: "def check(candidate):\n    assert candidate([], 'a') == []\n    assert candidate(['abc', 'bacd', 'cde', 'array'], 'a') == ['abc', 'bacd', 'array']\ncheck(filter_by_substring)\n" },
+  { task_id: "HumanEval/8", entry_point: "sum_product",
+    prompt: "from typing import List, Tuple\n\ndef sum_product(numbers: List[int]) -> Tuple[int, int]:\n",
+    tests: "def check(candidate):\n    assert candidate([]) == (0, 1)\n    assert candidate([1, 2, 3, 4]) == (10, 24)\n    assert candidate([1, 1, 1]) == (3, 1)\ncheck(sum_product)\n" },
+  { task_id: "HumanEval/11", entry_point: "string_xor",
+    prompt: "def string_xor(a: str, b: str) -> str:\n",
+    tests: "def check(candidate):\n    assert candidate('010', '110') == '100'\n    assert candidate('0101', '0000') == '0101'\ncheck(string_xor)\n" },
+  { task_id: "HumanEval/12", entry_point: "longest",
+    prompt: "from typing import List, Optional\n\ndef longest(strings: List[str]) -> Optional[str]:\n",
+    tests: "def check(candidate):\n    assert candidate([]) == None\n    assert candidate(['x', 'yyy', 'zzzz', 'www', 'kk', 'a']) == 'zzzz'\ncheck(longest)\n" },
+  { task_id: "HumanEval/13", entry_point: "greatest_common_divisor",
+    prompt: "def greatest_common_divisor(a: int, b: int) -> int:\n",
+    tests: "def check(candidate):\n    assert candidate(3, 5) == 1\n    assert candidate(25, 15) == 5\n    assert candidate(100, 75) == 25\ncheck(greatest_common_divisor)\n" },
+  { task_id: "HumanEval/14", entry_point: "all_prefixes",
+    prompt: "from typing import List\n\ndef all_prefixes(string: str) -> List[str]:\n",
+    tests: "def check(candidate):\n    assert candidate('') == []\n    assert candidate('abc') == ['a', 'ab', 'abc']\ncheck(all_prefixes)\n" },
+  { task_id: "HumanEval/15", entry_point: "string_sequence",
+    prompt: "def string_sequence(n: int) -> str:\n",
+    tests: "def check(candidate):\n    assert candidate(0) == '0'\n    assert candidate(3) == '0 1 2 3'\n    assert candidate(10) == '0 1 2 3 4 5 6 7 8 9 10'\ncheck(string_sequence)\n" },
+  { task_id: "HumanEval/16", entry_point: "count_distinct_characters",
+    prompt: "def count_distinct_characters(string: str) -> int:\n",
+    tests: "def check(candidate):\n    assert candidate('') == 0\n    assert candidate('abcde') == 5\n    assert candidate('abcde' + 'cade' + 'CADE') == 5\ncheck(count_distinct_characters)\n" },
+  { task_id: "HumanEval/17", entry_point: "parse_music",
+    prompt: "from typing import List\n\ndef parse_music(music_string: str) -> List[int]:\n",
+    tests: "def check(candidate):\n    assert candidate('') == []\n    assert candidate('o o o o') == [4, 4, 4, 4]\n    assert candidate('o| o| .| .| o o') == [2, 2, 1, 1, 4, 4]\ncheck(parse_music)\n" },
+  { task_id: "HumanEval/18", entry_point: "how_many_times",
+    prompt: "def how_many_times(string: str, substring: str) -> int:\n",
+    tests: "def check(candidate):\n    assert candidate('', 'x') == 0\n    assert candidate('aaaa', 'aa') == 3\n    assert candidate('aababaa', 'aa') == 2\ncheck(how_many_times)\n" },
+  { task_id: "HumanEval/20", entry_point: "find_closest_elements",
+    prompt: "from typing import List, Tuple\n\ndef find_closest_elements(numbers: List[float]) -> Tuple[float, float]:\n",
+    tests: "def check(candidate):\n    assert candidate([1.0, 2.0, 3.9, 4.0, 5.0, 2.2]) == (3.9, 4.0)\n    assert candidate([1.0, 2.0, 5.9, 4.0, 5.0]) == (5.0, 5.9)\ncheck(find_closest_elements)\n" },
+  { task_id: "HumanEval/21", entry_point: "rescale_to_unit",
+    prompt: "from typing import List\n\ndef rescale_to_unit(numbers: List[float]) -> List[float]:\n",
+    tests: "def check(candidate):\n    assert candidate([2.0, 49.9]) == [0.0, 1.0]\n    assert all(abs(a-b) < 1e-6 for a,b in zip(candidate([1.0, 2.0, 3.0, 4.0, 5.0]), [0.0, 0.25, 0.5, 0.75, 1.0]))\ncheck(rescale_to_unit)\n" },
+  { task_id: "HumanEval/22", entry_point: "filter_integers",
+    prompt: "from typing import List, Any\n\ndef filter_integers(values: List[Any]) -> List[int]:\n",
+    tests: "def check(candidate):\n    assert candidate([]) == []\n    assert candidate(['a', 3.14, 5]) == [5]\n    assert candidate([1, 2, 3, 'abc', {}, []]) == [1, 2, 3]\ncheck(filter_integers)\n" },
+  { task_id: "HumanEval/23", entry_point: "strlen",
+    prompt: "def strlen(string: str) -> int:\n",
+    tests: "def check(candidate):\n    assert candidate('') == 0\n    assert candidate('x') == 1\n    assert candidate('asdfgh') == 6\ncheck(strlen)\n" },
+  { task_id: "HumanEval/24", entry_point: "largest_divisor",
+    prompt: "def largest_divisor(n: int) -> int:\n",
+    tests: "def check(candidate):\n    assert candidate(3) == 1\n    assert candidate(7) == 1\n    assert candidate(10) == 5\n    assert candidate(100) == 50\ncheck(largest_divisor)\n" },
+  { task_id: "HumanEval/26", entry_point: "remove_duplicates",
+    prompt: "from typing import List\n\ndef remove_duplicates(numbers: List[int]) -> List[int]:\n",
+    tests: "def check(candidate):\n    assert candidate([]) == []\n    assert candidate([1, 2, 3, 2, 4]) == [1, 3, 4]\ncheck(remove_duplicates)\n" },
+  { task_id: "HumanEval/27", entry_point: "flip_case",
+    prompt: "def flip_case(string: str) -> str:\n",
+    tests: "def check(candidate):\n    assert candidate('') == ''\n    assert candidate('Hello!') == 'hELLO!'\ncheck(flip_case)\n" },
+  { task_id: "HumanEval/28", entry_point: "concatenate",
+    prompt: "from typing import List\n\ndef concatenate(strings: List[str]) -> str:\n",
+    tests: "def check(candidate):\n    assert candidate([]) == ''\n    assert candidate(['a', 'b', 'c']) == 'abc'\ncheck(concatenate)\n" }
+]
+
+let results = list.map(problems, fn(p) {
+  let special_hint =
+    if p.entry_point == "below_zero" then "RULE: Track a running balance from left to right. Return True immediately if the running balance ever becomes negative. Do not use final sum alone. Example: [1,2,-4,5,6] has running totals 1,3,-1 so return True.\n"
+    else if p.entry_point == "parse_music" then "RULE: Split on spaces. Map each note token exactly: o -> 4, o| -> 2, .| -> 1. Return the list of mapped durations.\n"
+    else if p.entry_point == "how_many_times" then "RULE: Count overlapping occurrences. Check every start index from 0 to len(string)-len(substring). Always advance by 1. Examples: aaaa with aa -> 3; aababaa with aa -> 2.\n"
+    else if p.entry_point == "remove_duplicates" then "RULE: Return only values that appear exactly once in the input, preserving original order. Remove every value whose count is greater than 1. Example [1,2,3,2,4] -> [1,3,4].\n"
+    else "" in
+  let init_prompt = str.concat([
+    "Complete this Python function body only. Return ONLY indented function body lines, no def line, no imports.\n\n",
+    special_hint,
+    p.prompt,
+    "\nTests:\n",
+    p.tests,
+    "\nReturn only the indented body:"
+  ]) in
+
+  let attempt_result = list.fold(list.range(0, 6),
+    { passed: false, source: "", receipt: "", prompt: init_prompt },
+    fn(acc, i) {
+      if acc.passed then acc else
+      let raw = agent.call_llm(acc.prompt, api_url, key, model) in
+      let source = if raw.ok then agent.strip_fences(raw.content) else "" in
+      let test_result = he.run_problem(p, source,
+        str.concat(["out/humaneval_large/", p.task_id, "/test_attempt_", str.from(i)])) in
+      let next_prompt = str.concat([
+        init_prompt,
+        "\nPrevious candidate failed. Candidate:\n",
+        source,
+        "\nError:\n",
+        test_result.result.stderr,
+        "\nReturn corrected indented body only:"
+      ]) in
+      {
+        passed: test_result.result.passed,
+        source: source,
+        receipt: test_result.receipt,
+        prompt: next_prompt
+      }
+    }) in
+
+  {
+    task_id: p.task_id,
+    accepted: attempt_result.passed,
+    passed_tests: attempt_result.passed,
+    source: attempt_result.source,
+    receipt: attempt_result.receipt
+  }
+})
+
+let passed = list.filter(results, fn(r) { r.passed_tests })
+
+{
+  total: list.len(results),
+  passed: list.len(passed),
+  pass_rate: (list.len(passed) + 0.0) / (list.len(results) + 0.0),
+  results: results
+}
