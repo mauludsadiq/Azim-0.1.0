@@ -1,0 +1,8 @@
+import("packages/azim_trial/lm_head") as lm
+import("std/hash") as hash
+import("std/json") as json
+
+{
+  w_hash: hash.sha256_text(json.canonicalize(lm.W_U_lm.data)),
+  dims: lm.W_U_lm.dims
+}

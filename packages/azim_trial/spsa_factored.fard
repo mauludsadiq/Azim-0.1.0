@@ -1,0 +1,77 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/math") as math
+import("tensor") as tensor
+
+fn rand_pm1_vec(n, seed) {
+  list.build(n, fn(i) {
+    let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+    let c = str.slice(h, 7, 8) in
+    if c == "0" || c == "1" || c == "2" || c == "3" ||
+       c == "4" || c == "5" || c == "6" || c == "7"
+    then 1.0 else -1.0
+  })
+}
+
+# A: rows x r (flattened row-major, length rows*r)
+# B: r x cols (flattened row-major, length r*cols)
+fn matmul_AB(A, rows, r, B, cols) {
+  list.build(rows * cols, fn(idx) {
+    let i = idx / cols in
+    let j = idx - i * cols in
+    list.fold(list.range(0, r), 0.0, fn(acc, k) {
+      acc + list.get(A, i * r + k) * list.get(B, k * cols + j)
+    })
+  })
+}
+
+fn W_from_factors(W_base, A, rows, r, B, cols) {
+  let AB = matmul_AB(A, rows, r, B, cols) in
+  list.build(rows * cols, fn(i) {
+    list.get(W_base, i) + list.get(AB, i)
+  })
+}
+
+# perturb (A,B) jointly with full-dimensional random +/-1 directions
+# in the smaller factored space: dim = rows*r + r*cols
+fn factored_spsa_step(W_base, A, B, rows, cols, r, step, epsilon, lr, loss_fn) {
+  let nA = rows * r in
+  let nB = r * cols in
+  let n_total = nA + nB in
+  let dir = rand_pm1_vec(n_total, step + 1) in
+  let dirA = list.take(dir, nA) in
+  let dirB = list.drop(dir, nA) in
+
+  let A_plus  = list.build(nA, fn(i) { list.get(A, i) + epsilon * list.get(dirA, i) }) in
+  let A_minus = list.build(nA, fn(i) { list.get(A, i) - epsilon * list.get(dirA, i) }) in
+  let B_plus  = list.build(nB, fn(i) { list.get(B, i) + epsilon * list.get(dirB, i) }) in
+  let B_minus = list.build(nB, fn(i) { list.get(B, i) - epsilon * list.get(dirB, i) }) in
+
+  let W_plus  = W_from_factors(W_base, A_plus,  rows, r, B_plus,  cols) in
+  let W_minus = W_from_factors(W_base, A_minus, rows, r, B_minus, cols) in
+
+  let l_plus  = loss_fn(W_plus) in
+  let l_minus = loss_fn(W_minus) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+
+  let A_new = list.build(nA, fn(i) { list.get(A, i) - lr * scale * list.get(dirA, i) }) in
+  let B_new = list.build(nB, fn(i) { list.get(B, i) - lr * scale * list.get(dirB, i) }) in
+
+  let W_eff = W_from_factors(W_base, A_new, rows, r, B_new, cols) in
+  let loss_after = loss_fn(W_eff) in
+
+  {
+    A: A_new,
+    B: B_new,
+    W_eff: W_eff,
+    loss_before: loss_fn(W_from_factors(W_base, A, rows, r, B, cols)),
+    loss_after: loss_after,
+    forward_evals: 2,
+    factored_dim: n_total,
+    full_dim: rows * cols
+  }
+}
+
+export { rand_pm1_vec, matmul_AB, W_from_factors, factored_spsa_step }

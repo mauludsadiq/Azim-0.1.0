@@ -1,0 +1,51 @@
+import("std/fs") as fs
+import("std/json") as json
+import("std/hash") as hash
+import("../azim_trial/tensor") as tensor
+import("../azim_trial/lm_head_64") as lm
+import("std/list") as list
+
+fn exists_checkpoint(checkpoint_path) {
+  fs.exists(checkpoint_path)
+}
+
+fn load_checkpoint_json(checkpoint_path) {
+  json.decode(fs.read_text(checkpoint_path))
+}
+
+fn checkpoint_to_matrix(ckpt) {
+  tensor.matrix(
+    list.get(ckpt.W_U_lm_dims, 0),
+    list.get(ckpt.W_U_lm_dims, 1),
+    ckpt.W_U_lm_data
+  )
+}
+
+fn load_or_initial(checkpoint_path) {
+  if exists_checkpoint(checkpoint_path) then
+    let ckpt = load_checkpoint_json(checkpoint_path) in
+    {
+      W: checkpoint_to_matrix(ckpt),
+      source: "checkpoint",
+      checkpoint_path: checkpoint_path,
+      checkpoint_sha256: hash.sha256_text(fs.read_text(checkpoint_path)),
+      previous_total_steps: ckpt.total_steps,
+      previous_avg_loss_after: ckpt.avg_loss_after
+    }
+  else
+    {
+      W: lm.W_U_lm,
+      source: "initial",
+      checkpoint_path: checkpoint_path,
+      checkpoint_sha256: "sha256:none",
+      previous_total_steps: 0,
+      previous_avg_loss_after: 0.0
+    }
+}
+
+export {
+  exists_checkpoint,
+  load_checkpoint_json,
+  checkpoint_to_matrix,
+  load_or_initial
+}
