@@ -1,0 +1,107 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/math") as math
+import("tensor") as tensor
+
+# Generate a single low-rank perturbation direction of shape (rows, cols),
+# flattened to length rows*cols, as the outer product of two random
+# +/-1 vectors of length r (rank) projected down to (rows) and (cols).
+#
+# For rank=1: direction = u (rows) outer v (cols), u_i,v_j in {-1,+1}
+# This has only rows+cols degrees of freedom instead of rows*cols.
+
+fn rand_pm1_vec(n, seed) {
+  list.build(n, fn(i) {
+    let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+    let c = str.slice(h, 7, 8) in
+    if c == "0" || c == "1" || c == "2" || c == "3" ||
+       c == "4" || c == "5" || c == "6" || c == "7"
+    then 1.0 else -1.0
+  })
+}
+
+# rank-r perturbation: sum of r independent rank-1 outer products,
+# scaled by 1/sqrt(r) so variance is comparable to a single rank-1 draw
+fn lowrank_dir(rows, cols, rank, step, seed_int) {
+  let r_dirs = list.build(rank, fn(ri) {
+    let u_seed = hash.sha256_text(json.canonicalize({
+      kind: "u", step: step, seed: seed_int, rank_i: ri
+    })) in
+    let v_seed = hash.sha256_text(json.canonicalize({
+      kind: "v", step: step, seed: seed_int, rank_i: ri
+    })) in
+    let u = rand_pm1_vec(rows, u_seed) in
+    let v = rand_pm1_vec(cols, v_seed) in
+    { u: u, v: v }
+  }) in
+  let scale = 1.0 / math.sqrt(rank + 0.0) in
+  list.build(rows * cols, fn(idx) {
+    let row = idx / cols in
+    let col = idx - row * cols in
+    let total = list.fold(r_dirs, 0.0, fn(acc, uv) {
+      acc + list.get(uv.u, row) * list.get(uv.v, col)
+    }) in
+    total * scale
+  })
+}
+
+fn spsa_grad_one(data, dir, l_plus, l_minus, epsilon) {
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  list.build(list.len(data), fn(i) { scale * list.get(dir, i) })
+}
+
+fn multi_direction_grad(data, dirs, l_plusses, l_minuses, epsilon) {
+  let k = list.len(dirs) in
+  let grads = list.map(list.range(0, k), fn(ki) {
+    spsa_grad_one(data,
+      list.get(dirs, ki),
+      list.get(l_plusses, ki),
+      list.get(l_minuses, ki),
+      epsilon)
+  }) in
+  let n = list.len(data) in
+  let summed = list.fold(grads, list.build(n, fn(_) { 0.0 }), fn(acc, g) {
+    list.build(n, fn(i) { list.get(acc, i) + list.get(g, i) })
+  }) in
+  list.build(n, fn(i) { list.get(summed, i) / (k + 0.0) })
+}
+
+fn apply_grad(data, grad, lr) {
+  list.build(list.len(data), fn(i) {
+    list.get(data, i) - lr * list.get(grad, i)
+  })
+}
+
+# rows, cols: shape of the weight matrix (data is its row-major flatten)
+# rank: rank of the perturbation subspace (1 = cheapest, lowest variance subspace;
+#       higher rank = covers more of the space per direction, more like full SPSA)
+fn lowrank_spsa_step(data, rows, cols, rank, step, k, epsilon, lr, loss_fn, make_W) {
+  let dirs = list.map(list.range(0, k), fn(ki) {
+    lowrank_dir(rows, cols, rank, step * k + ki, step + ki + 1)
+  }) in
+  let l_plusses = list.map(dirs, fn(d) {
+    let d_plus = list.build(list.len(data), fn(i) {
+      list.get(data, i) + epsilon * list.get(d, i)
+    }) in
+    loss_fn(make_W(d_plus))
+  }) in
+  let l_minuses = list.map(dirs, fn(d) {
+    let d_minus = list.build(list.len(data), fn(i) {
+      list.get(data, i) - epsilon * list.get(d, i)
+    }) in
+    loss_fn(make_W(d_minus))
+  }) in
+  let grad = multi_direction_grad(data, dirs, l_plusses, l_minuses, epsilon) in
+  let new_data = apply_grad(data, grad, lr) in
+  {
+    data: new_data,
+    grad: grad,
+    l_plusses: l_plusses,
+    l_minuses: l_minuses,
+    rank: rank
+  }
+}
+
+export { rand_pm1_vec, lowrank_dir, spsa_grad_one, multi_direction_grad, apply_grad, lowrank_spsa_step }

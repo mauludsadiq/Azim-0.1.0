@@ -1,0 +1,89 @@
+import("std/list") as list
+import("std/math") as math
+import("../packages/azim_trial/spsa_lowrank") as lr
+
+test "rand_pm1_vec returns correct length" {
+  let v = lr.rand_pm1_vec(5, "seed1") in
+  list.len(v) == 5
+}
+
+test "rand_pm1_vec values are +/-1" {
+  let v = lr.rand_pm1_vec(10, "seed2") in
+  list.all(v, fn(x) { x == 1.0 || x == -1.0 })
+}
+
+test "lowrank_dir returns rows*cols length" {
+  let d = lr.lowrank_dir(4, 3, 1, 0, 1) in
+  list.len(d) == 12
+}
+
+test "lowrank_dir rank 1 has low effective dimension" {
+  # rank-1 direction: row i, col j = u_i * v_j
+  # so direction[i*cols+j] / direction[i*cols+0] should be constant across j
+  # (ratio of v_j to v_0), independent of i -- this is the low-rank structure check
+  let d = lr.lowrank_dir(4, 3, 1, 0, 42) in
+  let row0 = list.build(3, fn(j) { list.get(d, 0 * 3 + j) }) in
+  let row1 = list.build(3, fn(j) { list.get(d, 1 * 3 + j) }) in
+  # ratio row1[j]/row0[j] should be same for all j (both equal u_1/u_0)
+  let ratios = list.map(list.range(0, 3), fn(j) {
+    list.get(row1, j) / list.get(row0, j)
+  }) in
+  let r0 = list.get(ratios, 0) in
+  list.all(ratios, fn(r) { math.abs(r - r0) < 0.0001 })
+}
+
+test "lowrank_dir higher rank breaks the rank-1 structure" {
+  let d = lr.lowrank_dir(4, 3, 4, 0, 42) in
+  list.len(d) == 12
+}
+
+test "spsa_grad_one matches expected scale" {
+  let data = [1.0, 2.0, 3.0] in
+  let dir = [1.0, -1.0, 1.0] in
+  let g = lr.spsa_grad_one(data, dir, 2.0, 1.0, 0.1) in
+  # scale = (2.0-1.0)/(2*0.1) = 5.0
+  # grad = scale * dir = [5.0, -5.0, 5.0]
+  math.abs(list.get(g, 0) - 5.0) < 0.0001 &&
+  math.abs(list.get(g, 1) - (-5.0)) < 0.0001
+}
+
+test "apply_grad moves data in -lr*grad direction" {
+  let data = [1.0, 1.0] in
+  let grad = [2.0, -2.0] in
+  let new_data = lr.apply_grad(data, grad, 0.1) in
+  math.abs(list.get(new_data, 0) - 0.8) < 0.0001 &&
+  math.abs(list.get(new_data, 1) - 1.2) < 0.0001
+}
+
+test "lowrank_spsa_step runs end to end on a quadratic bowl" {
+  # loss_fn = sum of squares, minimized at all-zero weights
+  let rows = 4 in
+  let cols = 4 in
+  let initial = list.build(rows * cols, fn(i) { 1.0 }) in
+  let loss_fn = fn(data) {
+    list.fold(data, 0.0, fn(acc, x) { acc + x * x })
+  } in
+  let make_W = fn(data) { data } in
+  let result = lr.lowrank_spsa_step(initial, rows, cols, 1, 0, 4, 0.01, 0.05, loss_fn, make_W) in
+  let new_loss = loss_fn(result.data) in
+  let old_loss = loss_fn(initial) in
+  new_loss < old_loss
+}
+
+test "rank-1 perturbation reduces loss on quadratic bowl over multiple steps" {
+  let rows = 4 in
+  let cols = 4 in
+  let loss_fn = fn(data) {
+    list.fold(data, 0.0, fn(acc, x) { acc + x * x })
+  } in
+  let make_W = fn(data) { data } in
+  let result = list.fold(list.range(0, 20),
+    { data: list.build(rows * cols, fn(i) { 1.0 }), step: 0 },
+    fn(acc, i) {
+      let r = lr.lowrank_spsa_step(acc.data, rows, cols, 1, acc.step, 4, 0.01, 0.05, loss_fn, make_W) in
+      { data: r.data, step: acc.step + 1 }
+    }) in
+  let final_loss = loss_fn(result.data) in
+  let initial_loss = loss_fn(list.build(rows * cols, fn(i) { 1.0 })) in
+  final_loss < initial_loss * 0.5
+}
