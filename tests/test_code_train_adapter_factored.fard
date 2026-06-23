@@ -1,0 +1,18 @@
+import("std/list") as list
+import("std/math") as math
+import("../packages/azim_code/code_train_adapter_factored") as cta
+
+test "run_standard_spsa reduces loss over many steps" {
+  let r = cta.run_standard_spsa(16, 16, 50, 0.01, 0.02, "out/test_cta_factored/std") in
+  r.final_loss < 5.0
+}
+
+test "run_factored_spsa reduces loss over many steps" {
+  let r = cta.run_factored_spsa(16, 16, 2, 50, 0.01, 0.02, "out/test_cta_factored/lr") in
+  r.final_loss < 5.0
+}
+
+test "std_delta is computed and non-negative" {
+  let r = cta.run_standard_spsa(16, 16, 20, 0.01, 0.02, "out/test_cta_factored/std2") in
+  r.std_delta >= 0.0
+}

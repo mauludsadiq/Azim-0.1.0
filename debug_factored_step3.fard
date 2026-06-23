@@ -1,0 +1,22 @@
+import("std/list") as list
+import("packages/azim_trial/spsa_factored") as sf
+import("packages/azim_code/code_train_adapter_factored") as cta
+
+let rows = 4
+let cols = 4
+let r = 2
+let W_target = cta.det_vec(rows*cols, "target_seed")
+let curvature = cta.det_curvature(rows*cols, "curvature_seed")
+let loss_fn = cta.make_loss_fn(rows, cols, W_target, curvature)
+let W_base = list.build(rows*cols, fn(i) { 0.0 })
+let A0 = list.build(rows*r, fn(i) { 0.0 })
+let B0 = cta.det_vec(r*cols, "B_init_seed")
+
+let step0 = sf.factored_spsa_step(W_base, A0, B0, rows, cols, r, 0, 0.01, 0.02, loss_fn)
+
+{
+  loss_before: step0.loss_before,
+  loss_after: step0.loss_after,
+  A_new_sample: list.take(step0.A, 3),
+  B_new_sample: list.take(step0.B, 3)
+}

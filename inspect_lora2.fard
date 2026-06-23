@@ -1,0 +1,7 @@
+import("packages/azim_code/code_train_adapter_factored") as cta
+
+{
+  k1_200:  cta.run_lora_spsa(16, 16, 2, 1.0, 200,  0.001, 0.1, "out/il2_k1_200"),
+  k1_1000: cta.run_lora_spsa(16, 16, 2, 1.0, 1000, 0.001, 0.1, "out/il2_k1_1000"),
+  k1_2000: cta.run_lora_spsa(16, 16, 2, 1.0, 2000, 0.001, 0.1, "out/il2_k1_2000")
+}

@@ -74,4 +74,96 @@ fn factored_spsa_step(W_base, A, B, rows, cols, r, step, epsilon, lr, loss_fn) {
   }
 }
 
-export { rand_pm1_vec, matmul_AB, W_from_factors, factored_spsa_step }
+
+# LoRA-style factored step: freeze B, train A only.
+# W = W_base + (alpha/r) * A * B
+# A initialized to zeros, B fixed small random.
+# Only A is updated — first-order in A, so no bilinear explosion.
+fn lora_spsa_step(W_base, A, B, rows, cols, r, alpha, step, epsilon, lr, loss_fn) {
+  let nA = rows * r in
+  let scale_factor = alpha / (r + 0.0) in
+  let dirA = rand_pm1_vec(nA, step + 1) in
+
+  let A_plus  = list.build(nA, fn(i) { list.get(A, i) + epsilon * list.get(dirA, i) }) in
+  let A_minus = list.build(nA, fn(i) { list.get(A, i) - epsilon * list.get(dirA, i) }) in
+
+  let W_plus  = list.build(rows * cols, fn(idx) {
+    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_plus, rows, r, B, cols), idx)
+  }) in
+  let W_minus = list.build(rows * cols, fn(idx) {
+    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_minus, rows, r, B, cols), idx)
+  }) in
+
+  let l_plus  = loss_fn(W_plus) in
+  let l_minus = loss_fn(W_minus) in
+  let grad_scale = (l_plus - l_minus) / (2.0 * epsilon) in
+
+  let A_new = list.build(nA, fn(i) {
+    let raw = list.get(A, i) - lr * grad_scale * list.get(dirA, i) in
+    if raw > 10.0 then 10.0 else if raw < -10.0 then -10.0 else raw
+  }) in
+
+  let W_eff = list.build(rows * cols, fn(idx) {
+    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_new, rows, r, B, cols), idx)
+  }) in
+
+  let loss_before = loss_fn(list.build(rows * cols, fn(idx) {
+    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A, rows, r, B, cols), idx)
+  })) in
+  let loss_after = loss_fn(W_eff) in
+
+  {
+    A: A_new,
+    B: B,
+    W_eff: W_eff,
+    loss_before: loss_before,
+    loss_after: loss_after,
+    grad_scale: grad_scale,
+    forward_evals: 2,
+    factored_dim: nA,
+    full_dim: rows * cols
+  }
+}
+
+
+fn lora_spsa_step_k(W_base, A, B, rows, cols, r, alpha, step, k_dirs, epsilon, lr, loss_fn) {
+  let nA = rows * r in
+  let scale_factor = alpha / (r + 0.0) in
+  let W_A = fn(A_in) {
+    list.build(rows * cols, fn(idx) {
+      list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_in, rows, r, B, cols), idx)
+    })
+  } in
+  let dirs = list.map(list.range(0, k_dirs), fn(ki) {
+    rand_pm1_vec(nA, step * k_dirs + ki + 1)
+  }) in
+  let grad_estimates = list.map(dirs, fn(d) {
+    let A_plus  = list.build(nA, fn(i) { list.get(A, i) + epsilon * list.get(d, i) }) in
+    let A_minus = list.build(nA, fn(i) { list.get(A, i) - epsilon * list.get(d, i) }) in
+    let l_plus  = loss_fn(W_A(A_plus)) in
+    let l_minus = loss_fn(W_A(A_minus)) in
+    let g = (l_plus - l_minus) / (2.0 * epsilon) in
+    list.build(nA, fn(i) { g * list.get(d, i) })
+  }) in
+  let avg_grad = list.fold(grad_estimates,
+    list.build(nA, fn(i) { 0.0 }),
+    fn(acc, g) { list.build(nA, fn(i) { list.get(acc, i) + list.get(g, i) }) }
+  ) in
+  let avg_grad_scaled = list.build(nA, fn(i) { list.get(avg_grad, i) / (k_dirs + 0.0) }) in
+  let A_new = list.build(nA, fn(i) {
+    let raw = list.get(A, i) - lr * list.get(avg_grad_scaled, i) in
+    if raw > 10.0 then 10.0 else if raw < -10.0 then -10.0 else raw
+  }) in
+  let loss_before = loss_fn(W_A(A)) in
+  let loss_after  = loss_fn(W_A(A_new)) in
+  {
+    A: A_new, B: B, W_eff: W_A(A_new),
+    loss_before: loss_before,
+    loss_after: loss_after,
+    forward_evals: 2 * k_dirs,
+    factored_dim: nA,
+    full_dim: rows * cols
+  }
+}
+
+export { rand_pm1_vec, matmul_AB, W_from_factors, factored_spsa_step, lora_spsa_step, lora_spsa_step_k }

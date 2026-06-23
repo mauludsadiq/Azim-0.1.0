@@ -1,0 +1,222 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("../azim_trial/spsa_factored") as sf
+
+# Synthetic but realistic loss landscape at real Azim dimensions:
+# L(W) = ||W - W_target||^2 weighted by a fixed per-coordinate curvature
+# vector (simulates anisotropic curvature like a real loss surface,
+# rather than the flat isotropic bowl used in the unit tests).
+fn make_loss_fn(rows, cols, W_target, curvature) {
+  fn(W) {
+    let n = rows * cols in
+    list.fold(list.range(0, n), 0.0, fn(acc, i) {
+      let diff = list.get(W, i) - list.get(W_target, i) in
+      acc + list.get(curvature, i) * diff * diff
+    })
+  }
+}
+
+fn hex_char_val(c) {
+  if c == "0" then 0.0 else if c == "1" then 1.0 else if c == "2" then 2.0
+  else if c == "3" then 3.0 else if c == "4" then 4.0 else if c == "5" then 5.0
+  else if c == "6" then 6.0 else if c == "7" then 7.0 else if c == "8" then 8.0
+  else if c == "9" then 9.0 else if c == "a" then 10.0 else if c == "b" then 11.0
+  else if c == "c" then 12.0 else if c == "d" then 13.0 else if c == "e" then 14.0
+  else 15.0
+}
+
+fn hex6_to_unit(h) {
+  let v0 = hex_char_val(str.slice(h, 0, 1)) in
+  let v1 = hex_char_val(str.slice(h, 1, 2)) in
+  let v2 = hex_char_val(str.slice(h, 2, 3)) in
+  let v3 = hex_char_val(str.slice(h, 3, 4)) in
+  let v4 = hex_char_val(str.slice(h, 4, 5)) in
+  let v5 = hex_char_val(str.slice(h, 5, 6)) in
+  let total = v0 * 1048576.0 + v1 * 65536.0 + v2 * 4096.0 + v3 * 256.0 + v4 * 16.0 + v5 in
+  total / 16777215.0
+}
+
+fn det_vec_i(i, seed) {
+  let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+  let v = hex6_to_unit(str.slice(h, 0, 6)) in
+  (v - 0.5) * 0.2
+}
+
+fn det_vec(n, seed) {
+  list.build(n, fn(i) {
+    let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+    let v = hex6_to_unit(str.slice(h, 0, 6)) in
+    (v - 0.5) * 0.2
+  })
+}
+
+fn det_curvature(n, seed) {
+  list.build(n, fn(i) {
+    let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+    let v = hex6_to_unit(str.slice(h, 0, 6)) in
+    0.1 + v * 2.0
+  })
+}
+
+fn run_standard_spsa(rows, cols, steps, epsilon, lr, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let n = rows * cols in
+  let W_target = det_vec(n, "target_seed") in
+  let curvature = det_curvature(n, "curvature_seed") in
+  let loss_fn = make_loss_fn(rows, cols, W_target, curvature) in
+  let W0 = list.build(n, fn(i) { 0.0 }) in
+  let result = list.fold(list.range(0, steps), { W: W0, deltas: [] }, fn(acc, step) {
+    let dir = sf.rand_pm1_vec(n, step + 1) in
+    let W_plus = list.build(n, fn(i) { list.get(acc.W, i) + epsilon * list.get(dir, i) }) in
+    let W_minus = list.build(n, fn(i) { list.get(acc.W, i) - epsilon * list.get(dir, i) }) in
+    let l_plus = loss_fn(W_plus) in
+    let l_minus = loss_fn(W_minus) in
+    let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+    let W_new = list.build(n, fn(i) { list.get(acc.W, i) - lr * scale * list.get(dir, i) }) in
+    let loss_before = loss_fn(acc.W) in
+    let loss_after = loss_fn(W_new) in
+    {
+      W: W_new,
+      deltas: list.append(acc.deltas, loss_after - loss_before)
+    }
+  }) in
+  let final_loss = loss_fn(result.W) in
+  let mean_delta = list.fold(result.deltas, 0.0, fn(a, x) { a + x }) / (steps + 0.0) in
+  let variance = list.fold(result.deltas, 0.0, fn(a, x) {
+    a + (x - mean_delta) * (x - mean_delta)
+  }) / (steps + 0.0) in
+  {
+    optimizer: "standard_spsa",
+    rows: rows, cols: cols, dim: n,
+    steps: steps,
+    final_loss: final_loss,
+    mean_delta: mean_delta,
+    std_delta: math_sqrt(variance),
+    deltas: result.deltas
+  }
+}
+
+fn math_sqrt(x) {
+  if x <= 0.0 then 0.0 else
+  list.fold(list.range(0, 20), x / 2.0, fn(g, i) {
+    (g + x / g) / 2.0
+  })
+}
+
+fn run_factored_spsa(rows, cols, r, steps, epsilon, lr, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let n = rows * cols in
+  let W_target = det_vec(n, "target_seed") in
+  let curvature = det_curvature(n, "curvature_seed") in
+  let loss_fn = make_loss_fn(rows, cols, W_target, curvature) in
+  let W_base = list.build(n, fn(i) { 0.0 }) in
+  let nA = rows * r in
+  let nB = r * cols in
+  let A0 = list.build(nA, fn(i) { 0.0 }) in
+  let B0 = det_vec(nB, "B_init_seed") in
+  let result = list.fold(list.range(0, steps), { A: A0, B: B0, deltas: [] }, fn(acc, step) {
+    let r2 = sf.factored_spsa_step(W_base, acc.A, acc.B, rows, cols, r, step, epsilon, lr, loss_fn) in
+    {
+      A: r2.A, B: r2.B,
+      deltas: list.append(acc.deltas, r2.loss_after - r2.loss_before)
+    }
+  }) in
+  let final_W = sf.W_from_factors(W_base, result.A, rows, r, result.B, cols) in
+  let final_loss = loss_fn(final_W) in
+  let mean_delta = list.fold(result.deltas, 0.0, fn(a, x) { a + x }) / (steps + 0.0) in
+  let variance = list.fold(result.deltas, 0.0, fn(a, x) {
+    a + (x - mean_delta) * (x - mean_delta)
+  }) / (steps + 0.0) in
+  {
+    optimizer: "factored_spsa",
+    rank: r,
+    rows: rows, cols: cols,
+    full_dim: n, factored_dim: nA + nB,
+    steps: steps,
+    final_loss: final_loss,
+    mean_delta: mean_delta,
+    std_delta: math_sqrt(variance),
+    deltas: result.deltas
+  }
+}
+
+
+fn run_lora_spsa(rows, cols, r, alpha, steps, epsilon, lr, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let n = rows * cols in
+  let W_target = det_vec(n, "target_seed") in
+  let curvature = det_curvature(n, "curvature_seed") in
+  let loss_fn = make_loss_fn(rows, cols, W_target, curvature) in
+  let W_base = list.build(n, fn(i) { 0.0 }) in
+  let nA = rows * r in
+  let nB = r * cols in
+  let A0 = list.build(nA, fn(i) { 0.0 }) in
+  let B0 = list.build(nB, fn(i) { det_vec_i(i, "B_init_seed") * 0.01 }) in
+  let result = list.fold(list.range(0, steps),
+    { A: A0, deltas: [] },
+    fn(acc, step) {
+      let r2 = sf.lora_spsa_step(W_base, acc.A, B0, rows, cols, r, alpha, step, epsilon, lr, loss_fn) in
+      { A: r2.A, deltas: list.append(acc.deltas, r2.loss_after - r2.loss_before) }
+    }) in
+  let final_W = sf.W_from_factors(W_base,
+    list.build(rows*r, fn(i) { (alpha/(r+0.0)) * list.get(result.A, i) }),
+    rows, r, B0, cols) in
+  let final_loss = loss_fn(final_W) in
+  let mean_delta = list.fold(result.deltas, 0.0, fn(a,x){a+x}) / (steps+0.0) in
+  let variance = list.fold(result.deltas, 0.0, fn(a,x){
+    a+(x-mean_delta)*(x-mean_delta)}) / (steps+0.0) in
+  {
+    optimizer: "lora_spsa",
+    rank: r, alpha: alpha,
+    rows: rows, cols: cols,
+    full_dim: n, trainable_dim: nA,
+    steps: steps,
+    final_loss: final_loss,
+    mean_delta: mean_delta,
+    std_delta: math_sqrt(variance)
+  }
+}
+
+
+fn run_lora_spsa_k(rows, cols, r, alpha, k_dirs, steps, epsilon, lr, out_dir) {
+  let _ = fs.make_dir(out_dir) in
+  let n = rows * cols in
+  let W_target = det_vec(n, "target_seed") in
+  let curvature = det_curvature(n, "curvature_seed") in
+  let loss_fn = make_loss_fn(rows, cols, W_target, curvature) in
+  let W_base = list.build(n, fn(i) { 0.0 }) in
+  let nA = rows * r in
+  let nB = r * cols in
+  let A0 = list.build(nA, fn(i) { 0.0 }) in
+  let B0 = list.build(nB, fn(i) { det_vec_i(i, "B_init_seed") }) in
+  let result = list.fold(list.range(0, steps),
+    { A: A0, deltas: [] },
+    fn(acc, step) {
+      let r2 = sf.lora_spsa_step_k(W_base, acc.A, B0, rows, cols, r, alpha, step, k_dirs, epsilon, lr, loss_fn) in
+      { A: r2.A, deltas: list.append(acc.deltas, r2.loss_after - r2.loss_before) }
+    }) in
+  let final_W = sf.W_from_factors(W_base,
+    list.build(rows*r, fn(i) { (alpha/(r+0.0)) * list.get(result.A, i) }),
+    rows, r, B0, cols) in
+  let final_loss = loss_fn(final_W) in
+  let mean_delta = list.fold(result.deltas, 0.0, fn(a,x){a+x}) / (steps+0.0) in
+  let variance = list.fold(result.deltas, 0.0, fn(a,x){
+    a+(x-mean_delta)*(x-mean_delta)}) / (steps+0.0) in
+  {
+    optimizer: "lora_spsa_k",
+    rank: r, alpha: alpha, k_dirs: k_dirs,
+    rows: rows, cols: cols,
+    full_dim: n, trainable_dim: nA,
+    forward_evals: steps * 2 * k_dirs,
+    steps: steps,
+    final_loss: final_loss,
+    mean_delta: mean_delta,
+    std_delta: math_sqrt(variance)
+  }
+}
+
+export { run_lora_spsa, run_lora_spsa_k, make_loss_fn, det_vec, det_curvature, run_standard_spsa, run_factored_spsa, math_sqrt }

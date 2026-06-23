@@ -1,0 +1,47 @@
+import("std/list") as list
+import("std/str") as str
+import("std/json") as json
+import("std/hash") as hash
+import("packages/azim_trial/spsa_factored") as sf
+import("packages/azim_code/code_train_adapter_factored") as cta
+
+let rows = 4
+let cols = 4
+let r = 2
+let W_target = cta.det_vec(rows*cols, "target_seed")
+let curvature = cta.det_curvature(rows*cols, "curvature_seed")
+let loss_fn = cta.make_loss_fn(rows, cols, W_target, curvature)
+let W_base = list.build(rows*cols, fn(i) { 0.0 })
+let A0 = list.build(rows*r, fn(i) { 0.0 })
+let B0 = list.build(r*cols, fn(i) { 0.0 })
+
+let nA = rows * r
+let nB = r * cols
+let n_total = nA + nB
+let dir = sf.rand_pm1_vec(n_total, 1)
+let dirA = list.take(dir, nA)
+let dirB = list.drop(dir, nA)
+
+let epsilon = 0.01
+let A_plus  = list.build(nA, fn(i) { list.get(A0, i) + epsilon * list.get(dirA, i) })
+let A_minus = list.build(nA, fn(i) { list.get(A0, i) - epsilon * list.get(dirA, i) })
+let B_plus  = list.build(nB, fn(i) { list.get(B0, i) + epsilon * list.get(dirB, i) })
+let B_minus = list.build(nB, fn(i) { list.get(B0, i) - epsilon * list.get(dirB, i) })
+
+let W_plus  = sf.W_from_factors(W_base, A_plus,  rows, r, B_plus,  cols)
+let W_minus = sf.W_from_factors(W_base, A_minus, rows, r, B_minus, cols)
+
+let l_plus = loss_fn(W_plus)
+let l_minus = loss_fn(W_minus)
+
+{
+  dirA_sample: list.take(dirA, 3),
+  dirB_sample: list.take(dirB, 3),
+  A_plus_sample: list.take(A_plus, 3),
+  B_plus_sample: list.take(B_plus, 3),
+  W_plus_sample: list.take(W_plus, 3),
+  W_minus_sample: list.take(W_minus, 3),
+  l_plus: l_plus,
+  l_minus: l_minus,
+  diff: l_plus - l_minus
+}

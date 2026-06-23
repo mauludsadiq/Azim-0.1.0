@@ -1,0 +1,7 @@
+import("packages/azim_code/code_train_adapter_factored") as cta
+
+{
+  standard: cta.run_standard_spsa(129, 64, 500, 0.001, 0.0005, "out/fc_std"),
+  factored_r4: cta.run_factored_spsa(129, 64, 4, 500, 0.001, 0.0005, "out/fc_lr4"),
+  factored_r8: cta.run_factored_spsa(129, 64, 8, 500, 0.001, 0.0005, "out/fc_lr8")
+}

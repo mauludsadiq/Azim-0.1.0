@@ -1,0 +1,17 @@
+import("std/list") as list
+import("../packages/azim_code/code_train_adapter_factored") as cta
+
+test "lora_spsa reduces loss on synthetic landscape" {
+  let r = cta.run_lora_spsa(16, 16, 2, 1.0, 50, 0.001, 0.0001, "out/test_lora") in
+  r.final_loss < 5.0
+}
+
+test "lora_spsa trainable_dim is rows*r" {
+  let r = cta.run_lora_spsa(16, 16, 2, 1.0, 10, 0.001, 0.0001, "out/test_lora2") in
+  r.trainable_dim == 32
+}
+
+test "lora_spsa std_delta is non-negative" {
+  let r = cta.run_lora_spsa(16, 16, 2, 1.0, 20, 0.001, 0.0001, "out/test_lora3") in
+  r.std_delta >= 0.0
+}

@@ -1,0 +1,6 @@
+import("packages/azim_code/code_train_adapter_factored") as cta
+
+{
+  standard: cta.run_standard_spsa(16, 16, 50, 0.01, 0.02, "out/inspect_std"),
+  factored: cta.run_factored_spsa(16, 16, 2, 50, 0.01, 0.02, "out/inspect_factored")
+}
