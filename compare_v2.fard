@@ -1,0 +1,14 @@
+import("packages/azim_code/code_train_adapter_factored_v2") as cta
+
+let shard = "out/full_corpus_with_humaneval.jsonl"
+let lr = 0.0005
+let epsilon = 0.0001
+let max_records = 5
+let steps = 20
+
+{
+  standard:   cta.run_standard_spsa_corpus(shard, "out/cv2_std",  lr, epsilon, max_records, steps),
+  lora_k4_r4: cta.run_lora_spsa_corpus(shard, "out/cv2_lk4r4", lr, epsilon, 4, 1.0, 4, max_records, steps),
+  lora_k8_r4: cta.run_lora_spsa_corpus(shard, "out/cv2_lk8r4", lr, epsilon, 4, 1.0, 8, max_records, steps),
+  lora_k4_r8: cta.run_lora_spsa_corpus(shard, "out/cv2_lk4r8", lr, epsilon, 8, 1.0, 4, max_records, steps)
+}

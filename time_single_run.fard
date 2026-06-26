@@ -1,0 +1,6 @@
+import("packages/azim_code/code_train_adapter_factored") as cta
+
+{
+  std_10steps: cta.run_standard_spsa(129, 64, 10, 0.001, 0.0001, "out/time_std"),
+  lora_10steps: cta.run_lora_spsa_k(129, 64, 4, 1.0, 4, 10, 0.001, 0.0001, "out/time_lora")
+}

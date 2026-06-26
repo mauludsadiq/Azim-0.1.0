@@ -15,133 +15,33 @@ fn rand_pm1_vec(n, seed) {
   })
 }
 
-# A: rows x r (flattened row-major, length rows*r)
-# B: r x cols (flattened row-major, length r*cols)
-fn matmul_AB(A, rows, r, B, cols) {
-  list.build(rows * cols, fn(idx) {
-    let i = idx / cols in
-    let j = idx - i * cols in
-    list.fold(list.range(0, r), 0.0, fn(acc, k) {
-      acc + list.get(A, i * r + k) * list.get(B, k * cols + j)
-    })
-  })
+# A: tensor matrix rows x r
+# B: tensor matrix r x cols
+# returns tensor matrix rows x cols
+fn W_from_factors_t(W_base, A, B, alpha, r) {
+  let scale = alpha / (r + 0.0) in
+  let AB = tensor.matmul(A, B) in
+  tensor.matrix(list.get(W_base.dims, 0), list.get(W_base.dims, 1),
+    list.build(list.len(W_base.data), fn(i) {
+      list.get(W_base.data, i) + scale * list.get(AB.data, i)
+    }))
 }
 
-fn W_from_factors(W_base, A, rows, r, B, cols) {
-  let AB = matmul_AB(A, rows, r, B, cols) in
-  list.build(rows * cols, fn(i) {
-    list.get(W_base, i) + list.get(AB, i)
-  })
-}
-
-# perturb (A,B) jointly with full-dimensional random +/-1 directions
-# in the smaller factored space: dim = rows*r + r*cols
-fn factored_spsa_step(W_base, A, B, rows, cols, r, step, epsilon, lr, loss_fn) {
-  let nA = rows * r in
-  let nB = r * cols in
-  let n_total = nA + nB in
-  let dir = rand_pm1_vec(n_total, step + 1) in
-  let dirA = list.take(dir, nA) in
-  let dirB = list.drop(dir, nA) in
-
-  let A_plus  = list.build(nA, fn(i) { list.get(A, i) + epsilon * list.get(dirA, i) }) in
-  let A_minus = list.build(nA, fn(i) { list.get(A, i) - epsilon * list.get(dirA, i) }) in
-  let B_plus  = list.build(nB, fn(i) { list.get(B, i) + epsilon * list.get(dirB, i) }) in
-  let B_minus = list.build(nB, fn(i) { list.get(B, i) - epsilon * list.get(dirB, i) }) in
-
-  let W_plus  = W_from_factors(W_base, A_plus,  rows, r, B_plus,  cols) in
-  let W_minus = W_from_factors(W_base, A_minus, rows, r, B_minus, cols) in
-
-  let l_plus  = loss_fn(W_plus) in
-  let l_minus = loss_fn(W_minus) in
-  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
-
-  let A_new = list.build(nA, fn(i) { list.get(A, i) - lr * scale * list.get(dirA, i) }) in
-  let B_new = list.build(nB, fn(i) { list.get(B, i) - lr * scale * list.get(dirB, i) }) in
-
-  let W_eff = W_from_factors(W_base, A_new, rows, r, B_new, cols) in
-  let loss_after = loss_fn(W_eff) in
-
-  {
-    A: A_new,
-    B: B_new,
-    W_eff: W_eff,
-    loss_before: loss_fn(W_from_factors(W_base, A, rows, r, B, cols)),
-    loss_after: loss_after,
-    forward_evals: 2,
-    factored_dim: n_total,
-    full_dim: rows * cols
-  }
-}
-
-
-# LoRA-style factored step: freeze B, train A only.
-# W = W_base + (alpha/r) * A * B
-# A initialized to zeros, B fixed small random.
-# Only A is updated — first-order in A, so no bilinear explosion.
-fn lora_spsa_step(W_base, A, B, rows, cols, r, alpha, step, epsilon, lr, loss_fn) {
-  let nA = rows * r in
-  let scale_factor = alpha / (r + 0.0) in
-  let dirA = rand_pm1_vec(nA, step + 1) in
-
-  let A_plus  = list.build(nA, fn(i) { list.get(A, i) + epsilon * list.get(dirA, i) }) in
-  let A_minus = list.build(nA, fn(i) { list.get(A, i) - epsilon * list.get(dirA, i) }) in
-
-  let W_plus  = list.build(rows * cols, fn(idx) {
-    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_plus, rows, r, B, cols), idx)
-  }) in
-  let W_minus = list.build(rows * cols, fn(idx) {
-    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_minus, rows, r, B, cols), idx)
-  }) in
-
-  let l_plus  = loss_fn(W_plus) in
-  let l_minus = loss_fn(W_minus) in
-  let grad_scale = (l_plus - l_minus) / (2.0 * epsilon) in
-
-  let A_new = list.build(nA, fn(i) {
-    let raw = list.get(A, i) - lr * grad_scale * list.get(dirA, i) in
-    if raw > 10.0 then 10.0 else if raw < -10.0 then -10.0 else raw
-  }) in
-
-  let W_eff = list.build(rows * cols, fn(idx) {
-    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_new, rows, r, B, cols), idx)
-  }) in
-
-  let loss_before = loss_fn(list.build(rows * cols, fn(idx) {
-    list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A, rows, r, B, cols), idx)
-  })) in
-  let loss_after = loss_fn(W_eff) in
-
-  {
-    A: A_new,
-    B: B,
-    W_eff: W_eff,
-    loss_before: loss_before,
-    loss_after: loss_after,
-    grad_scale: grad_scale,
-    forward_evals: 2,
-    factored_dim: nA,
-    full_dim: rows * cols
-  }
-}
-
-
+# LoRA-SPSA with K directions, A-only training, native tensor ops
 fn lora_spsa_step_k(W_base, A, B, rows, cols, r, alpha, step, k_dirs, epsilon, lr, loss_fn) {
   let nA = rows * r in
-  let scale_factor = alpha / (r + 0.0) in
-  let W_A = fn(A_in) {
-    list.build(rows * cols, fn(idx) {
-      list.get(W_base, idx) + scale_factor * list.get(matmul_AB(A_in, rows, r, B, cols), idx)
-    })
-  } in
   let dirs = list.map(list.range(0, k_dirs), fn(ki) {
     rand_pm1_vec(nA, step * k_dirs + ki + 1)
   }) in
   let grad_estimates = list.map(dirs, fn(d) {
-    let A_plus  = list.build(nA, fn(i) { list.get(A, i) + epsilon * list.get(d, i) }) in
-    let A_minus = list.build(nA, fn(i) { list.get(A, i) - epsilon * list.get(d, i) }) in
-    let l_plus  = loss_fn(W_A(A_plus)) in
-    let l_minus = loss_fn(W_A(A_minus)) in
+    let A_plus_data  = list.build(nA, fn(i) { list.get(A.data, i) + epsilon * list.get(d, i) }) in
+    let A_minus_data = list.build(nA, fn(i) { list.get(A.data, i) - epsilon * list.get(d, i) }) in
+    let A_plus  = tensor.matrix(rows, r, A_plus_data) in
+    let A_minus = tensor.matrix(rows, r, A_minus_data) in
+    let W_plus  = W_from_factors_t(W_base, A_plus,  B, alpha, r) in
+    let W_minus = W_from_factors_t(W_base, A_minus, B, alpha, r) in
+    let l_plus  = loss_fn(W_plus) in
+    let l_minus = loss_fn(W_minus) in
     let g = (l_plus - l_minus) / (2.0 * epsilon) in
     list.build(nA, fn(i) { g * list.get(d, i) })
   }) in
@@ -150,14 +50,18 @@ fn lora_spsa_step_k(W_base, A, B, rows, cols, r, alpha, step, k_dirs, epsilon, l
     fn(acc, g) { list.build(nA, fn(i) { list.get(acc, i) + list.get(g, i) }) }
   ) in
   let avg_grad_scaled = list.build(nA, fn(i) { list.get(avg_grad, i) / (k_dirs + 0.0) }) in
-  let A_new = list.build(nA, fn(i) {
-    let raw = list.get(A, i) - lr * list.get(avg_grad_scaled, i) in
+  let A_new_data = list.build(nA, fn(i) {
+    let raw = list.get(A.data, i) - lr * list.get(avg_grad_scaled, i) in
     if raw > 10.0 then 10.0 else if raw < -10.0 then -10.0 else raw
   }) in
-  let loss_before = loss_fn(W_A(A)) in
-  let loss_after  = loss_fn(W_A(A_new)) in
+  let A_new = tensor.matrix(rows, r, A_new_data) in
+  let loss_before = loss_fn(W_from_factors_t(W_base, A, B, alpha, r)) in
+  let W_new = W_from_factors_t(W_base, A_new, B, alpha, r) in
+  let loss_after = loss_fn(W_new) in
   {
-    A: A_new, B: B, W_eff: W_A(A_new),
+    A: A_new,
+    B: B,
+    W_eff: W_new,
     loss_before: loss_before,
     loss_after: loss_after,
     forward_evals: 2 * k_dirs,
@@ -166,4 +70,28 @@ fn lora_spsa_step_k(W_base, A, B, rows, cols, r, alpha, step, k_dirs, epsilon, l
   }
 }
 
-export { rand_pm1_vec, matmul_AB, W_from_factors, factored_spsa_step, lora_spsa_step, lora_spsa_step_k }
+# Standard SPSA on full W using native tensor ops
+fn standard_spsa_step(W, step, epsilon, lr, loss_fn) {
+  let rows = list.get(W.dims, 0) in
+  let cols = list.get(W.dims, 1) in
+  let n = rows * cols in
+  let dir = rand_pm1_vec(n, step + 1) in
+  let W_plus  = tensor.matrix(rows, cols, list.build(n, fn(i) { list.get(W.data, i) + epsilon * list.get(dir, i) })) in
+  let W_minus = tensor.matrix(rows, cols, list.build(n, fn(i) { list.get(W.data, i) - epsilon * list.get(dir, i) })) in
+  let l_plus  = loss_fn(W_plus) in
+  let l_minus = loss_fn(W_minus) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  let W_new = tensor.matrix(rows, cols, list.build(n, fn(i) {
+    list.get(W.data, i) - lr * scale * list.get(dir, i)
+  })) in
+  let loss_before = loss_fn(W) in
+  let loss_after  = loss_fn(W_new) in
+  {
+    W: W_new,
+    loss_before: loss_before,
+    loss_after: loss_after,
+    forward_evals: 2
+  }
+}
+
+export { rand_pm1_vec, W_from_factors_t, lora_spsa_step_k, standard_spsa_step }

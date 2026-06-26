@@ -1,0 +1,6 @@
+import("packages/azim_code/code_train_adapter_factored_v2") as cta
+
+{
+  std:  cta.run_standard_spsa_corpus("out/full_corpus_with_humaneval.jsonl", "out/tv2_std", 0.0005, 0.0001, 3, 10),
+  lora: cta.run_lora_spsa_corpus("out/full_corpus_with_humaneval.jsonl", "out/tv2_lora", 0.0005, 0.0001, 4, 1.0, 4, 3, 10)
+}

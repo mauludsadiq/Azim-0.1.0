@@ -1,0 +1,106 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("std/str") as str
+import("../azim_trial/tensor") as tensor
+import("../azim_trial/lm_train") as lmt
+import("../azim_trial/spsa_factored") as sf
+import("code_checkpoint_loader") as loader
+
+fn hex_char_val(c) {
+  if c == "0" then 0.0 else if c == "1" then 1.0 else if c == "2" then 2.0
+  else if c == "3" then 3.0 else if c == "4" then 4.0 else if c == "5" then 5.0
+  else if c == "6" then 6.0 else if c == "7" then 7.0 else if c == "8" then 8.0
+  else if c == "9" then 9.0 else if c == "a" then 10.0 else if c == "b" then 11.0
+  else if c == "c" then 12.0 else if c == "d" then 13.0 else if c == "e" then 14.0
+  else 15.0
+}
+
+fn hex6_to_unit(h) {
+  let v0 = hex_char_val(str.slice(h, 0, 1)) in
+  let v1 = hex_char_val(str.slice(h, 1, 2)) in
+  let v2 = hex_char_val(str.slice(h, 2, 3)) in
+  let v3 = hex_char_val(str.slice(h, 3, 4)) in
+  let v4 = hex_char_val(str.slice(h, 4, 5)) in
+  let v5 = hex_char_val(str.slice(h, 5, 6)) in
+  (v0*1048576.0 + v1*65536.0 + v2*4096.0 + v3*256.0 + v4*16.0 + v5) / 16777215.0
+}
+
+fn det_vec_i(i, seed) {
+  let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+  (hex6_to_unit(str.slice(h, 0, 6)) - 0.5) * 0.2
+}
+
+fn token_window(tokens, max_tokens) {
+  if list.len(tokens) <= max_tokens then tokens else list.take(tokens, max_tokens)
+}
+
+fn non_empty_lines(text) {
+  list.filter(str.split(text, "\n"), fn(line) { str.len(str.trim(line)) > 0 })
+}
+
+fn read_records(shard_path) {
+  list.map(non_empty_lines(fs.read_text(shard_path)), fn(line) {
+    json.decode(line)
+  })
+}
+
+fn math_sqrt(x) {
+  if x <= 0.0 then 0.0 else
+  list.fold(list.range(0, 20), x / 2.0, fn(g, _) { (g + x / g) / 2.0 })
+}
+
+# Standard SPSA on real corpus using lmt.nll_at_pos
+fn run_standard_spsa_corpus(shard_path, out_dir, lr, epsilon, max_records, steps_per_record) {
+  let _ = fs.make_dir(out_dir) in
+  let checkpoint_path = path.join(out_dir, "code_checkpoint.json") in
+  let start = loader.load_or_initial(checkpoint_path) in
+  let records = list.take(read_records(shard_path), max_records) in
+  let result = list.fold(records, { W: start.W, deltas: [], step: start.previous_total_steps }, fn(acc, record) {
+    let ids = token_window(record.tokens, 64) in
+    let r2 = list.fold(list.range(0, steps_per_record), { W: acc.W, deltas: acc.deltas, step: acc.step }, fn(acc2, si) {
+      if list.len(ids) < 2 then acc2 else
+      let pos = acc2.step % (list.len(ids) - 1) in
+      let loss_fn = fn(W) { lmt.nll_at_pos(W, ids, pos) } in
+      let s = sf.standard_spsa_step(acc2.W, acc2.step, epsilon, lr, loss_fn) in
+      { W: s.W, deltas: list.append(acc2.deltas, s.loss_after - s.loss_before), step: acc2.step + 1 }
+    }) in
+    { W: r2.W, deltas: r2.deltas, step: r2.step }
+  }) in
+  let mean_delta = list.fold(result.deltas, 0.0, fn(a,x){a+x}) / (list.len(result.deltas) + 0.0) in
+  let variance = list.fold(result.deltas, 0.0, fn(a,x){ a+(x-mean_delta)*(x-mean_delta) }) / (list.len(result.deltas) + 0.0) in
+  { optimizer: "standard_spsa", total_steps: result.step, mean_delta: mean_delta, std_delta: math_sqrt(variance) }
+}
+
+# LoRA SPSA on real corpus using lmt.nll_at_pos
+fn run_lora_spsa_corpus(shard_path, out_dir, lr, epsilon, r, alpha, k_dirs, max_records, steps_per_record) {
+  let _ = fs.make_dir(out_dir) in
+  let checkpoint_path = path.join(out_dir, "code_checkpoint.json") in
+  let start = loader.load_or_initial(checkpoint_path) in
+  let W_base = start.W in
+  let rows = list.get(W_base.dims, 0) in
+  let cols = list.get(W_base.dims, 1) in
+  let nA = rows * r in
+  let nB = r * cols in
+  let A0 = tensor.matrix(rows, r, list.build(nA, fn(i) { 0.0 })) in
+  let B0 = tensor.matrix(r, cols, list.build(nB, fn(i) { det_vec_i(i, "B_init_seed") })) in
+  let records = list.take(read_records(shard_path), max_records) in
+  let result = list.fold(records, { A: A0, deltas: [], step: start.previous_total_steps }, fn(acc, record) {
+    let ids = token_window(record.tokens, 64) in
+    let r2 = list.fold(list.range(0, steps_per_record), { A: acc.A, deltas: acc.deltas, step: acc.step }, fn(acc2, si) {
+      if list.len(ids) < 2 then acc2 else
+      let pos = acc2.step % (list.len(ids) - 1) in
+      let loss_fn = fn(W) { lmt.nll_at_pos(W, ids, pos) } in
+      let s = sf.lora_spsa_step_k(W_base, acc2.A, B0, rows, cols, r, alpha, acc2.step, k_dirs, epsilon, lr, loss_fn) in
+      { A: s.A, deltas: list.append(acc2.deltas, s.loss_after - s.loss_before), step: acc2.step + 1 }
+    }) in
+    { A: r2.A, deltas: r2.deltas, step: r2.step }
+  }) in
+  let mean_delta = list.fold(result.deltas, 0.0, fn(a,x){a+x}) / (list.len(result.deltas) + 0.0) in
+  let variance = list.fold(result.deltas, 0.0, fn(a,x){ a+(x-mean_delta)*(x-mean_delta) }) / (list.len(result.deltas) + 0.0) in
+  { optimizer: "lora_spsa", rank: r, k_dirs: k_dirs, total_steps: result.step, mean_delta: mean_delta, std_delta: math_sqrt(variance) }
+}
+
+export { run_standard_spsa_corpus, run_lora_spsa_corpus }

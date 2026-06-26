@@ -1,0 +1,14 @@
+import("packages/azim_code/code_train_adapter_factored") as cta
+
+# Equal forward-eval budget: 2000 evals each
+# Standard SPSA: 1000 steps x 2 evals
+# LoRA K=4: 250 steps x 4 dirs x 2 evals = 2000 evals
+# LoRA K=8: 125 steps x 8 dirs x 2 evals = 2000 evals
+# rows=129, cols=64 — real Azim W_U_lm dimensions
+
+{
+  standard_spsa:  cta.run_standard_spsa(129, 64, 1000, 0.001, 0.0001, "out/real_std"),
+  lora_k4_r4:     cta.run_lora_spsa_k(129, 64, 4, 1.0, 4, 250, 0.001, 0.0001, "out/real_lk4r4"),
+  lora_k8_r4:     cta.run_lora_spsa_k(129, 64, 4, 1.0, 8, 125, 0.001, 0.0001, "out/real_lk8r4"),
+  lora_k4_r8:     cta.run_lora_spsa_k(129, 64, 8, 1.0, 4, 250, 0.001, 0.0001, "out/real_lk4r8")
+}
