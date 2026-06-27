@@ -1,0 +1,11 @@
+# mega corpus round 1 - FARD dominant
+import("packages/azim_code/code_train_adapter") as train
+
+train.train_shard(
+  "out/mega_corpus.jsonl",
+  "out/mega_corpus_training",
+  0.0005,
+  0.0001,
+  2012,
+  50
+)
