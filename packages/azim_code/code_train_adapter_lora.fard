@@ -1,0 +1,190 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("../azim_trial/tensor") as tensor
+import("../azim_trial/lm_head") as lm
+import("../azim_trial/lm_train") as lmt
+import("../azim_trial/spsa_factored") as sf
+import("code_checkpoint_loader") as loader
+
+fn non_empty_lines(text) {
+  list.filter(str.split(text, "\n"), fn(line) { str.len(str.trim(line)) > 0 })
+}
+
+fn read_records(shard_path) {
+  list.map(non_empty_lines(fs.read_text(shard_path)), fn(line) {
+    json.decode(line)
+  })
+}
+
+fn token_window(tokens, max_tokens) {
+  if list.len(tokens) <= max_tokens then tokens else list.take(tokens, max_tokens)
+}
+
+fn loss_positions(token_ids) {
+  let n = list.len(token_ids) in
+  if n < 2 then [] else list.range(0, n - 1)
+}
+
+fn avg_loss_for_tokens(W, token_ids) {
+  let positions = loss_positions(token_ids) in
+  if list.len(positions) == 0 then 0.0 else
+  let losses = list.map(positions, fn(pos) { lmt.nll_at_pos(W, token_ids, pos) }) in
+  list.fold(losses, 0.0, fn(acc, x) { acc + x }) / list.len(losses)
+}
+
+fn det_vec_i(i, seed) {
+  let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+  let chars = "0123456789abcdef" in
+  let hv = fn(c) {
+    if c == "0" then 0.0 else if c == "1" then 1.0 else if c == "2" then 2.0
+    else if c == "3" then 3.0 else if c == "4" then 4.0 else if c == "5" then 5.0
+    else if c == "6" then 6.0 else if c == "7" then 7.0 else if c == "8" then 8.0
+    else if c == "9" then 9.0 else if c == "a" then 10.0 else if c == "b" then 11.0
+    else if c == "c" then 12.0 else if c == "d" then 13.0 else if c == "e" then 14.0
+    else 15.0
+  } in
+  let v = hv(str.slice(h,0,1))*1048576.0 + hv(str.slice(h,1,2))*65536.0 +
+          hv(str.slice(h,2,3))*4096.0 + hv(str.slice(h,3,4))*256.0 +
+          hv(str.slice(h,4,5))*16.0 + hv(str.slice(h,5,6)) in
+  (v / 16777215.0 - 0.5) * 0.2
+}
+
+# LoRA K=8 rank=4 step — trains A-factor only
+# W = W_base + (alpha/r) * A * B
+# A: zeros initialized, updated each step
+# B: fixed small random
+fn train_step_lora(W_base, A, B, token_ids, lr, epsilon, r, alpha, k_dirs, step_index) {
+  let ids = token_window(token_ids, 64) in
+  if list.len(ids) < 2 then {
+    W: sf.W_from_factors_t(W_base, A, B, alpha, r),
+    A: A, B: B,
+    loss_before: 0.0, loss_after: 0.0, loss_delta: 0.0,
+    token_count: list.len(ids), step_index: step_index
+  } else
+  let pos = step_index % (list.len(ids) - 1) in
+  let loss_fn = fn(W) { lmt.nll_at_pos(W, ids, pos) } in
+  let rows = list.get(W_base.dims, 0) in
+  let cols = list.get(W_base.dims, 1) in
+  let s = sf.lora_spsa_step_k(W_base, A, B, rows, cols, r, alpha, step_index, k_dirs, epsilon, lr, loss_fn) in
+  {
+    W: s.W_eff,
+    A: s.A, B: s.B,
+    loss_before: s.loss_before,
+    loss_after: s.loss_after,
+    loss_delta: s.loss_after - s.loss_before,
+    token_count: list.len(ids),
+    step_index: step_index
+  }
+}
+
+fn train_record_lora(W_base, A, B, record, lr, epsilon, r, alpha, k_dirs, step_index, steps_per_record) {
+  list.fold(list.range(0, steps_per_record),
+    { W: sf.W_from_factors_t(W_base, A, B, alpha, r), A: A, B: B, losses: [], step_index: step_index },
+    fn(acc, local_step) {
+      let step = train_step_lora(W_base, acc.A, acc.B, record.tokens, lr, epsilon, r, alpha, k_dirs, acc.step_index) in
+      {
+        W: step.W, A: step.A, B: step.B,
+        losses: list.append(acc.losses, {
+          before: step.loss_before, after: step.loss_after,
+          delta: step.loss_delta, token_count: step.token_count,
+          step_index: step.step_index
+        }),
+        step_index: acc.step_index + 1
+      }
+    })
+}
+
+fn train_shard_lora_from_checkpoint(shard_path, out_dir, lr, epsilon, r, alpha, k_dirs, max_records, steps_per_record, checkpoint_path) {
+  let _ = fs.make_dir(out_dir) in
+  let start = loader.load_or_initial(checkpoint_path) in
+  let W_base = start.W in
+  let rows = list.get(W_base.dims, 0) in
+  let cols = list.get(W_base.dims, 1) in
+  let nA = rows * r in
+  let nB = r * cols in
+  let A0 = tensor.matrix(rows, r, list.build(nA, fn(i) { 0.0 })) in
+  let B0 = tensor.matrix(r, cols, list.build(nB, fn(i) { det_vec_i(i, "B_init_seed") })) in
+  let all_records = read_records(shard_path) in
+  let records = if max_records < 0 then all_records else list.take(all_records, max_records) in
+  let trained = list.fold(records,
+    { W: W_base, A: A0, B: B0, history: [], step_index: start.previous_total_steps },
+    fn(acc, record) {
+      let r2 = train_record_lora(acc.W, acc.A, acc.B, record, lr, epsilon, r, alpha, k_dirs, acc.step_index, steps_per_record) in
+      let avg_before = if list.len(r2.losses) == 0 then 0.0 else
+        list.fold(r2.losses, 0.0, fn(a, x) { a + x.before }) / list.len(r2.losses) in
+      let avg_after = if list.len(r2.losses) == 0 then 0.0 else
+        list.fold(r2.losses, 0.0, fn(a, x) { a + x.after }) / list.len(r2.losses) in
+      {
+        W: r2.W, A: r2.A, B: r2.B,
+        step_index: r2.step_index,
+        history: list.append(acc.history, {
+          kind: record.kind,
+          token_count: record.token_count,
+          source_sha256: record.source_sha256,
+          avg_loss_before: avg_before,
+          avg_loss_after: avg_after,
+          avg_loss_delta: avg_after - avg_before,
+          steps: list.len(r2.losses)
+        })
+      }
+    }) in
+  let total_steps = trained.step_index in
+  let avg_loss_before = if list.len(trained.history) == 0 then 0.0 else
+    list.fold(trained.history, 0.0, fn(a, h) { a + h.avg_loss_before }) / list.len(trained.history) in
+  let avg_loss_after = if list.len(trained.history) == 0 then 0.0 else
+    list.fold(trained.history, 0.0, fn(a, h) { a + h.avg_loss_after }) / list.len(trained.history) in
+  let W_final = trained.W in
+  let checkpoint = {
+    component: "azim_code.code_train_adapter_lora",
+    version: "1.0.0",
+    optimizer: "lora_spsa",
+    rank: r, alpha: alpha, k_dirs: k_dirs,
+    shard_path: shard_path,
+    shard_sha256: hash.sha256_text(fs.read_text(shard_path)),
+    lr: lr, epsilon: epsilon,
+    max_records: max_records,
+    steps_per_record: steps_per_record,
+    record_count: list.len(records),
+    total_steps: total_steps,
+    avg_loss_before: avg_loss_before,
+    avg_loss_after: avg_loss_after,
+    avg_loss_delta: avg_loss_after - avg_loss_before,
+    W_U_lm_dims: W_final.dims,
+    W_U_lm_data: W_final.data,
+    history: trained.history
+  } in
+  let checkpoint_text = json.canonicalize(checkpoint) in
+  let ckpt_path = path.join(out_dir, "code_checkpoint.json") in
+  let _w = fs.write_text(ckpt_path, checkpoint_text) in
+  {
+    ok: true,
+    optimizer: "lora_spsa",
+    rank: r, alpha: alpha, k_dirs: k_dirs,
+    checkpoint_path: ckpt_path,
+    checkpoint_sha256: hash.sha256_text(checkpoint_text),
+    record_count: list.len(records),
+    total_steps: total_steps,
+    avg_loss_before: avg_loss_before,
+    avg_loss_after: avg_loss_after,
+    avg_loss_delta: avg_loss_after - avg_loss_before
+  }
+}
+
+fn train_shard(shard_path, out_dir, lr, epsilon, max_records, steps_per_record) {
+  train_shard_lora_from_checkpoint(
+    shard_path, out_dir, lr, epsilon,
+    4, 1.0, 8,
+    max_records, steps_per_record,
+    path.join(out_dir, "code_checkpoint.json")
+  )
+}
+
+export {
+  non_empty_lines, read_records, token_window,
+  train_step_lora, train_record_lora,
+  train_shard_lora_from_checkpoint, train_shard
+}

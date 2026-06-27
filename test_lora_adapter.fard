@@ -1,0 +1,10 @@
+import("packages/azim_code/code_train_adapter_lora") as train
+
+train.train_shard(
+  "out/full_corpus_with_humaneval.jsonl",
+  "out/lora_adapter_test",
+  0.0005,
+  0.0001,
+  3,
+  5
+)
