@@ -1,0 +1,28 @@
+import("std/list") as list
+import("std/json") as json
+import("packages/azim_trial/lm_train") as lmt
+import("packages/azim_trial/lm_head") as lm
+import("packages/azim_trial/spsa_factored") as sf
+import("packages/azim_code/code_train_adapter_lora") as cta
+
+let rows = list.get(lm.W_U_lm.dims, 0)
+let cols = list.get(lm.W_U_lm.dims, 1)
+let r = 4
+let nA = rows * r
+let nB = r * cols
+
+let A0 = { dims: [rows, r], data: list.build(nA, fn(i) { 0.0 }) }
+let B0 = { dims: [r, cols], data: list.build(nB, fn(i) { cta.det_vec_i(i, "B_init_seed") }) }
+
+let sample_tokens = [2, 36, 27, 33, 10, 29, 27, 19, 10, 40, 3]
+let loss_fn = fn(W) { lmt.nll_at_pos(W, sample_tokens, 3) }
+
+let step0 = sf.lora_spsa_step_k(lm.W_U_lm, A0, B0, rows, cols, r, 1.0, 0, 8, 0.0001, 0.0005, loss_fn)
+
+{
+  rows: rows, cols: cols,
+  loss_before: step0.loss_before,
+  loss_after: step0.loss_after,
+  A_sample: list.take(step0.A.data, 5),
+  forward_evals: step0.forward_evals
+}

@@ -186,5 +186,5 @@ fn train_shard(shard_path, out_dir, lr, epsilon, max_records, steps_per_record) 
 export {
   non_empty_lines, read_records, token_window,
   train_step_lora, train_record_lora,
-  train_shard_lora_from_checkpoint, train_shard
+  train_shard_lora_from_checkpoint, train_shard, det_vec_i
 }
