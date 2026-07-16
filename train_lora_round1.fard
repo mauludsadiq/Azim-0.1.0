@@ -1,4 +1,4 @@
-# LoRA K=8 rank=4 - round 4
+# LoRA K=8 rank=4 - round 6
 import("packages/azim_code/code_train_adapter_lora") as train
 
 train.train_shard(
