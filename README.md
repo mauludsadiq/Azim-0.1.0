@@ -189,8 +189,6 @@ LoRA K=8 rank=4 is the first optimizer configuration to achieve signal-to-noise 
 | A2 | 30M | ~200 | HumanEval meaningful scores |
 | A3 | 85M | ~500 | GPT-2 small equivalent |
 
-LTFF application submitted. Emails sent to Santa Fe Institute (Krakauer, Mitchell).
-
 ---
 
 ## Architecture
