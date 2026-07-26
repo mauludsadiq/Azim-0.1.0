@@ -1,0 +1,11 @@
+import("packages/azim_code/jepa_train_adapter") as jepa
+
+jepa.train_shard_jepa(
+  "out/full_corpus_with_humaneval.jsonl",
+  "out/jepa_training",
+  0.001,
+  0.01,
+  16,
+  94,
+  50
+)
