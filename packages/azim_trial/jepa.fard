@@ -1,0 +1,112 @@
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/math") as math
+import("std/str") as str
+import("tensor") as tensor
+import("lm_head") as lm
+
+# Encode a token window into a latent vector
+# Uses the existing transformer hidden state — no new parameters needed here
+fn encode(token_ids) {
+  lm.hidden_for_tokens(token_ids)
+}
+
+# Predictor: W_pred (d_model x d_model) applied to context encoding
+# This is the only thing being trained
+fn predict(z_context, W_pred) {
+  tensor.matvec(W_pred, z_context)
+}
+
+# Cosine distance loss between z_hat and z_target
+# Loss = 1 - cosine_similarity = 1 - (z_hat · z_target) / (||z_hat|| ||z_target||)
+fn cosine_loss(z_hat, z_target) {
+  let dot = tensor.dot(z_hat, z_target) in
+  let norm_hat = math.sqrt(tensor.dot(z_hat, z_hat) + 0.000001) in
+  let norm_tgt = math.sqrt(tensor.dot(z_target, z_target) + 0.000001) in
+  1.0 - dot / (norm_hat * norm_tgt)
+}
+
+# One JEPA training step
+# token_ids: full token sequence
+# pos: context ends here, target starts here
+# lookahead: how many tokens ahead to predict (default 4)
+# W_pred: current predictor weights (d_model x d_model tensor)
+# Returns updated W_pred and loss values
+fn jepa_step(token_ids, pos, lookahead, W_pred, epsilon, lr, step_index) {
+  let n = list.len(token_ids) in
+  if pos < 1 || pos + lookahead > n then {
+    W_pred: W_pred, loss_before: 0.0, loss_after: 0.0, loss_delta: 0.0
+  } else
+  let context_ids = list.take(token_ids, pos) in
+  let target_ids  = list.take(list.drop(token_ids, pos), lookahead) in
+
+  # Encode context and target — target encoder is frozen (stop-gradient in SPSA:
+  # we only perturb W_pred, never the encoder weights)
+  let z_context = encode(context_ids) in
+  let z_target  = encode(target_ids) in
+
+  # Loss function: perturb W_pred only
+  let loss_fn = fn(W) {
+    let z_hat = predict(z_context, W) in
+    cosine_loss(z_hat, z_target)
+  } in
+
+  # SPSA step on W_pred
+  let rows = list.get(W_pred.dims, 0) in
+  let cols = list.get(W_pred.dims, 1) in
+  let n_params = rows * cols in
+  let h = hash.sha256_text(json.canonicalize({ step: step_index, kind: "jepa_dir" })) in
+  let dir_data = list.build(n_params, fn(i) {
+    let hi = hash.sha256_text(json.canonicalize({ h: h, i: i })) in
+    let c = str.slice(hi, 7, 8) in
+    if c == "0" || c == "1" || c == "2" || c == "3" ||
+       c == "4" || c == "5" || c == "6" || c == "7"
+    then 1.0 else -1.0
+  }) in
+  let W_plus  = tensor.matrix(rows, cols, list.build(n_params, fn(i) {
+    list.get(W_pred.data, i) + epsilon * list.get(dir_data, i)
+  })) in
+  let W_minus = tensor.matrix(rows, cols, list.build(n_params, fn(i) {
+    list.get(W_pred.data, i) - epsilon * list.get(dir_data, i)
+  })) in
+  let l_plus  = loss_fn(W_plus) in
+  let l_minus = loss_fn(W_minus) in
+  let loss_before = loss_fn(W_pred) in
+  let scale = (l_plus - l_minus) / (2.0 * epsilon) in
+  let W_new = tensor.matrix(rows, cols, list.build(n_params, fn(i) {
+    list.get(W_pred.data, i) - lr * scale * list.get(dir_data, i)
+  })) in
+  let loss_after = loss_fn(W_new) in
+  {
+    W_pred: W_new,
+    loss_before: loss_before,
+    loss_after: loss_after,
+    loss_delta: loss_after - loss_before
+  }
+}
+
+# Initialize W_pred as identity matrix (predictor starts as pass-through)
+fn init_W_pred(d_model) {
+  tensor.matrix(d_model, d_model, list.build(d_model * d_model, fn(i) {
+    let row = i / d_model in
+    let col = i - row * d_model in
+    if row == col then 1.0 else 0.0
+  }))
+}
+
+# Receipt for a JEPA step
+fn jepa_receipt(step_index, pos, lookahead, loss_before, loss_after, W_pred_sha) {
+  hash.sha256_text(json.canonicalize({
+    component: "azim_trial.jepa",
+    version: "1.0.0",
+    step: step_index,
+    pos: pos,
+    lookahead: lookahead,
+    loss_before: loss_before,
+    loss_after: loss_after,
+    W_pred_sha256: W_pred_sha
+  }))
+}
+
+export { encode, predict, cosine_loss, jepa_step, init_W_pred, jepa_receipt }

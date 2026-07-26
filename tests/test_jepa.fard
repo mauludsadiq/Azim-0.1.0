@@ -1,0 +1,56 @@
+import("std/list") as list
+import("std/str") as str
+import("std/math") as math
+import("../packages/azim_trial/jepa") as jepa
+
+test "init_W_pred is identity" {
+  let W = jepa.init_W_pred(8) in
+  let trace = list.fold(list.range(0, 8), 0.0, fn(acc, i) {
+    acc + list.get(W.data, i * 8 + i)
+  }) in
+  math.abs(trace - 8.0) < 0.0001
+}
+
+test "encode produces d_model vector" {
+  let z = jepa.encode([2, 36, 27, 33, 3]) in
+  list.len(z.data) == 8
+}
+
+test "predict produces d_model vector" {
+  let W = jepa.init_W_pred(8) in
+  let z = jepa.encode([2, 36, 27, 33, 3]) in
+  let z_hat = jepa.predict(z, W) in
+  list.len(z_hat.data) == 8
+}
+
+test "cosine_loss between identical vectors is near zero" {
+  let z = jepa.encode([2, 36, 27, 33, 3]) in
+  let loss = jepa.cosine_loss(z, z) in
+  math.abs(loss) < 0.0001
+}
+
+test "cosine_loss between different vectors is positive" {
+  let z1 = jepa.encode([2, 36, 27, 33, 3]) in
+  let z2 = jepa.encode([2, 10, 20, 30, 3]) in
+  let loss = jepa.cosine_loss(z1, z2) in
+  loss > 0.0
+}
+
+test "jepa_step reduces loss on real tokens" {
+  let tokens = [2, 36, 27, 33, 10, 29, 27, 19, 10, 40, 3] in
+  let W = jepa.init_W_pred(8) in
+  let result = list.fold(list.range(0, 10),
+    { W: W, losses: [] },
+    fn(acc, i) {
+      let s = jepa.jepa_step(tokens, 4, 4, acc.W, 0.001, 0.01, i) in
+      { W: s.W_pred, losses: list.append(acc.losses, s.loss_after) }
+    }) in
+  let first = list.get(result.losses, 0) in
+  let last = list.get(result.losses, 9) in
+  last < first
+}
+
+test "jepa_receipt returns sha256 string" {
+  let r = jepa.jepa_receipt(0, 4, 4, 0.5, 0.48, "sha256:abc") in
+  str.starts_with(r, "sha256:")
+}
