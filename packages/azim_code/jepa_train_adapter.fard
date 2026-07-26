@@ -1,0 +1,109 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("../azim_trial/tensor") as tensor
+import("../azim_trial/jepa") as jepa
+
+fn non_empty_lines(text) {
+  list.filter(str.split(text, "\n"), fn(line) { str.len(str.trim(line)) > 0 })
+}
+
+fn read_records(shard_path) {
+  list.map(non_empty_lines(fs.read_text(shard_path)), fn(line) {
+    json.decode(line)
+  })
+}
+
+fn token_window(tokens, max_tokens) {
+  if list.len(tokens) <= max_tokens then tokens else list.take(tokens, max_tokens)
+}
+
+fn train_record_jepa(W_pred, record, epsilon, lr, lookahead, steps_per_record, step_index) {
+  let ids = token_window(record.tokens, 64) in
+  let n = list.len(ids) in
+  if n < lookahead + 2 then { W_pred: W_pred, losses: [], step_index: step_index } else
+  list.fold(list.range(0, steps_per_record),
+    { W_pred: W_pred, losses: [], step_index: step_index },
+    fn(acc, local_step) {
+      let pos = 1 + (acc.step_index % (n - lookahead - 1)) in
+      let s = jepa.jepa_step(ids, pos, lookahead, acc.W_pred, epsilon, lr, acc.step_index) in
+      let receipt = jepa.jepa_receipt(acc.step_index, pos, lookahead,
+        s.loss_before, s.loss_after,
+        hash.sha256_text(json.canonicalize(s.W_pred.data))) in
+      {
+        W_pred: s.W_pred,
+        losses: list.append(acc.losses, {
+          before: s.loss_before, after: s.loss_after,
+          delta: s.loss_delta, pos: pos, receipt: receipt
+        }),
+        step_index: acc.step_index + 1
+      }
+    })
+}
+
+fn train_shard_jepa(shard_path, out_dir, epsilon, lr, lookahead, max_records, steps_per_record) {
+  let _ = fs.make_dir(out_dir) in
+  let checkpoint_path = path.join(out_dir, "jepa_checkpoint.json") in
+  let d_model = 8 in
+  let W_pred = if fs.exists(checkpoint_path) then
+    let ckpt = json.decode(fs.read_text(checkpoint_path)) in
+    tensor.matrix(list.get(ckpt.W_pred_dims, 0), list.get(ckpt.W_pred_dims, 1), ckpt.W_pred_data)
+  else
+    jepa.init_W_pred(d_model) in
+  let prev_steps = if fs.exists(checkpoint_path) then
+    json.decode(fs.read_text(checkpoint_path)).total_steps
+  else 0 in
+  let all_records = read_records(shard_path) in
+  let records = if max_records < 0 then all_records else list.take(all_records, max_records) in
+  let trained = list.fold(records,
+    { W_pred: W_pred, history: [], step_index: prev_steps },
+    fn(acc, record) {
+      let r = train_record_jepa(acc.W_pred, record, epsilon, lr, lookahead, steps_per_record, acc.step_index) in
+      let avg_before = if list.len(r.losses) == 0 then 0.0 else
+        list.fold(r.losses, 0.0, fn(a, x) { a + x.before }) / list.len(r.losses) in
+      let avg_after = if list.len(r.losses) == 0 then 0.0 else
+        list.fold(r.losses, 0.0, fn(a, x) { a + x.after }) / list.len(r.losses) in
+      {
+        W_pred: r.W_pred,
+        step_index: r.step_index,
+        history: list.append(acc.history, {
+          token_count: record.token_count,
+          avg_loss_before: avg_before,
+          avg_loss_after: avg_after,
+          avg_loss_delta: avg_after - avg_before
+        })
+      }
+    }) in
+  let avg_loss_before = if list.len(trained.history) == 0 then 0.0 else
+    list.fold(trained.history, 0.0, fn(a, h) { a + h.avg_loss_before }) / list.len(trained.history) in
+  let avg_loss_after = if list.len(trained.history) == 0 then 0.0 else
+    list.fold(trained.history, 0.0, fn(a, h) { a + h.avg_loss_after }) / list.len(trained.history) in
+  let checkpoint = {
+    component: "azim_code.jepa_train_adapter",
+    version: "1.0.0",
+    lookahead: lookahead,
+    epsilon: epsilon, lr: lr,
+    total_steps: trained.step_index,
+    avg_loss_before: avg_loss_before,
+    avg_loss_after: avg_loss_after,
+    avg_loss_delta: avg_loss_after - avg_loss_before,
+    W_pred_dims: trained.W_pred.dims,
+    W_pred_data: trained.W_pred.data,
+    history: trained.history
+  } in
+  let ckpt_text = json.canonicalize(checkpoint) in
+  let _w = fs.write_text(checkpoint_path, ckpt_text) in
+  {
+    ok: true,
+    total_steps: trained.step_index,
+    avg_loss_before: avg_loss_before,
+    avg_loss_after: avg_loss_after,
+    avg_loss_delta: avg_loss_after - avg_loss_before,
+    checkpoint_sha256: hash.sha256_text(ckpt_text)
+  }
+}
+
+export { train_record_jepa, train_shard_jepa }
