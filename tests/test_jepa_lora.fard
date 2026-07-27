@@ -1,0 +1,31 @@
+import("std/list") as list
+import("std/math") as math
+import("../packages/azim_trial/jepa") as jepa
+
+test "init_lora_factors produces correct shapes" {
+  let f = jepa.init_lora_factors(8, 2, "test_seed") in
+  list.len(f.A.data) == 16 && list.len(f.B.data) == 16
+}
+
+test "jepa_lora_step reduces loss on real tokens" {
+  let tokens = [2, 36, 27, 33, 10, 29, 27, 19, 10, 40, 3] in
+  let W_base = jepa.init_W_pred(8) in
+  let f = jepa.init_lora_factors(8, 2, "test_seed") in
+  let result = list.fold(list.range(0, 10),
+    { A: f.A, losses: [] },
+    fn(acc, i) {
+      let s = jepa.jepa_lora_step(tokens, 4, 4, W_base, acc.A, f.B, 2, 1.0, 8, 0.001, 0.01, i) in
+      { A: s.A, losses: list.append(acc.losses, s.loss_after) }
+    }) in
+  let first = list.get(result.losses, 0) in
+  let last = list.get(result.losses, 9) in
+  last < first
+}
+
+test "jepa_lora_step forward_evals is 2*k_dirs" {
+  let tokens = [2, 36, 27, 33, 10, 29, 27, 19, 10, 40, 3] in
+  let W_base = jepa.init_W_pred(8) in
+  let f = jepa.init_lora_factors(8, 2, "test_seed") in
+  let s = jepa.jepa_lora_step(tokens, 4, 4, W_base, f.A, f.B, 2, 1.0, 8, 0.001, 0.01, 0) in
+  s.forward_evals == 16
+}

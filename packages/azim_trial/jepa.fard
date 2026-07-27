@@ -109,4 +109,84 @@ fn jepa_receipt(step_index, pos, lookahead, loss_before, loss_after, W_pred_sha)
   }))
 }
 
-export { encode, predict, cosine_loss, jepa_step, init_W_pred, jepa_receipt }
+export { encode, predict, cosine_loss, jepa_step, init_W_pred, jepa_receipt, jepa_lora_step, init_lora_factors }
+
+# LoRA K=8 JEPA step — trains A-factor of W_pred only
+# W_pred = W_pred_base + (alpha/r) * A * B
+# A: zeros init, B: fixed small random, only A updated
+fn jepa_lora_step(token_ids, pos, lookahead, W_pred_base, A, B, r, alpha, k_dirs, epsilon, lr, step_index) {
+  let n = list.len(token_ids) in
+  if pos < 1 || pos + lookahead > n then {
+    A: A, loss_before: 0.0, loss_after: 0.0, loss_delta: 0.0
+  } else
+  let context_ids = list.take(token_ids, pos) in
+  let target_ids  = list.take(list.drop(token_ids, pos), lookahead) in
+  let z_context = encode(context_ids) in
+  let z_target  = encode(target_ids) in
+  let d_model = list.get(W_pred_base.dims, 0) in
+  let nA = d_model * r in
+  let scale_factor = alpha / (r + 0.0) in
+
+  let W_eff = fn(A_in) {
+    let AB = tensor.matmul(A_in, B) in
+    tensor.matrix(d_model, d_model, list.build(d_model * d_model, fn(i) {
+      list.get(W_pred_base.data, i) + scale_factor * list.get(AB.data, i)
+    }))
+  } in
+
+  let loss_fn = fn(A_in) {
+    let z_hat = predict(z_context, W_eff(A_in)) in
+    cosine_loss(z_hat, z_target)
+  } in
+
+  let dirs = list.map(list.range(0, k_dirs), fn(ki) {
+    let h = hash.sha256_text(json.canonicalize({ step: step_index, ki: ki, kind: "jepa_lora" })) in
+    list.build(nA, fn(i) {
+      let hi = hash.sha256_text(json.canonicalize({ h: h, i: i })) in
+      let c = str.slice(hi, 7, 8) in
+      if c == "0" || c == "1" || c == "2" || c == "3" ||
+         c == "4" || c == "5" || c == "6" || c == "7"
+      then 1.0 else -1.0
+    })
+  }) in
+
+  let grad_estimates = list.map(dirs, fn(d) {
+    let A_plus  = tensor.matrix(d_model, r, list.build(nA, fn(i) { list.get(A.data, i) + epsilon * list.get(d, i) })) in
+    let A_minus = tensor.matrix(d_model, r, list.build(nA, fn(i) { list.get(A.data, i) - epsilon * list.get(d, i) })) in
+    let g = (loss_fn(A_plus) - loss_fn(A_minus)) / (2.0 * epsilon) in
+    list.build(nA, fn(i) { g * list.get(d, i) })
+  }) in
+
+  let avg_grad = list.fold(grad_estimates,
+    list.build(nA, fn(i) { 0.0 }),
+    fn(acc, g) { list.build(nA, fn(i) { list.get(acc, i) + list.get(g, i) }) }
+  ) in
+  let avg_grad_scaled = list.build(nA, fn(i) { list.get(avg_grad, i) / (k_dirs + 0.0) }) in
+  let A_new = tensor.matrix(d_model, r, list.build(nA, fn(i) {
+    let raw = list.get(A.data, i) - lr * list.get(avg_grad_scaled, i) in
+    if raw > 10.0 then 10.0 else if raw < -10.0 then -10.0 else raw
+  })) in
+
+  let loss_before = loss_fn(A) in
+  let loss_after  = loss_fn(A_new) in
+  {
+    A: A_new,
+    W_pred: W_eff(A_new),
+    loss_before: loss_before,
+    loss_after: loss_after,
+    loss_delta: loss_after - loss_before,
+    forward_evals: 2 * k_dirs
+  }
+}
+
+fn init_lora_factors(d_model, r, seed) {
+  let nA = d_model * r in
+  let nB = r * d_model in
+  let A = tensor.matrix(d_model, r, list.build(nA, fn(i) { 0.0 })) in
+  let B = tensor.matrix(r, d_model, list.build(nB, fn(i) {
+    let h = hash.sha256_text(json.canonicalize({ seed: seed, i: i })) in
+    let v0 = if str.slice(h,0,1) == "0" then 0.0 else if str.slice(h,0,1) == "1" then 1.0 else if str.slice(h,0,1) == "2" then 2.0 else if str.slice(h,0,1) == "3" then 3.0 else if str.slice(h,0,1) == "4" then 4.0 else if str.slice(h,0,1) == "5" then 5.0 else if str.slice(h,0,1) == "6" then 6.0 else if str.slice(h,0,1) == "7" then 7.0 else if str.slice(h,0,1) == "8" then 8.0 else if str.slice(h,0,1) == "9" then 9.0 else if str.slice(h,0,1) == "a" then 10.0 else if str.slice(h,0,1) == "b" then 11.0 else if str.slice(h,0,1) == "c" then 12.0 else if str.slice(h,0,1) == "d" then 13.0 else if str.slice(h,0,1) == "e" then 14.0 else 15.0 in
+    (v0 / 15.0 - 0.5) * 0.2
+  })) in
+  { A: A, B: B }
+}
