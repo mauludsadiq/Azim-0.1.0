@@ -4,5 +4,5 @@ jla.train_shard_jepa_lora(
   "out/full_corpus_with_humaneval.jsonl",
   "out/jepa_lora_training",
   0.001, 0.01, 4, 2, 1.0, 8,
-  5, 10
+  94, 50
 )
