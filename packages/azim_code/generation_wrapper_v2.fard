@@ -1,0 +1,116 @@
+import("std/fs") as fs
+import("std/path") as path
+import("std/str") as str
+import("std/list") as list
+import("std/json") as json
+import("std/hash") as hash
+import("tokenizer") as tok
+import("hybrid_proposer_v2") as proposer
+
+fn generation_record(prompt, source, index) {
+  let tokenized_prompt = tok.tokenize_with_receipt(prompt) in
+  let tokenized_source = tok.tokenize_with_receipt(source) in
+  let record = {
+    component: "azim_code.generation_wrapper_v2",
+    version: "1.0.0",
+    index: index,
+    prompt: prompt,
+    prompt_sha256: hash.sha256_text(prompt),
+    source_sha256: hash.sha256_text(source),
+    prompt_tokens: tokenized_prompt.tokens,
+    source_tokens: tokenized_source.tokens,
+    prompt_tokenizer_receipt: tokenized_prompt.receipt,
+    source_tokenizer_receipt: tokenized_source.receipt
+  } in
+  {
+    record: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn generate_one(task, lang, index, checkpoint_path, candidate_dir, run_dir,
+                api_url, api_key, model, max_azim_attempts, max_llm_attempts,
+                azim_tokens, azim_k, azim_temp) {
+  let cdir = str.concat([candidate_dir, "/", str.from(index)]) in
+  let rdir = str.concat([run_dir, "/", str.from(index)]) in
+  let _ = fs.make_dir(cdir) in
+  let _ = fs.make_dir(rdir) in
+  let result = proposer.hybrid_propose_and_verify(
+    task, lang, checkpoint_path, cdir, rdir,
+    api_url, api_key, model,
+    max_azim_attempts, max_llm_attempts, azim_tokens, azim_k, azim_temp
+  ) in
+  let source = result.accepted_source in
+  let gen = generation_record(task, source, index) in
+  let cpath = path.join(cdir, str.concat(["candidate_", str.from(index), ".py"])) in
+  let rout = path.join(rdir, "run_out") in
+  let verif_receipt = hash.sha256_text(json.canonicalize({
+    accepted: result.accepted,
+    accepted_from: result.accepted_from,
+    total_attempts: result.total_attempts
+  })) in
+  let record = {
+    index: index,
+    prompt: task,
+    source: source,
+    lang: lang,
+    candidate_path: cpath,
+    run_out: rout,
+    candidate_dir: cdir,
+    run_dir: rdir,
+    generation: gen,
+    verification: { receipt: verif_receipt, accepted: result.accepted },
+    accepted: result.accepted,
+    accepted_from: result.accepted_from,
+    attempts: result.attempts,
+    total_attempts: result.total_attempts,
+    class: lang,
+    lang: lang
+  } in
+  {
+    result: record,
+    receipt: hash.sha256_text(json.canonicalize(record))
+  }
+}
+
+fn generate_batch(tasks, langs, checkpoint_path, candidate_dir, run_dir,
+                  api_url, api_key, model, max_azim_attempts, max_llm_attempts,
+                  azim_tokens, azim_k, azim_temp) {
+  let _ = fs.make_dir(candidate_dir) in
+  let _ = fs.make_dir(run_dir) in
+  let records = list.map(list.range(0, list.len(tasks)), fn(i) {
+    generate_one(
+      list.get(tasks, i),
+      list.get(langs, i % list.len(langs)),
+      i, checkpoint_path, candidate_dir, run_dir,
+      api_url, api_key, model,
+      max_azim_attempts, max_llm_attempts, azim_tokens, azim_k, azim_temp
+    )
+  }) in
+  let accepted = list.filter(records, fn(r) { r.result.accepted }) in
+  let rejected = list.filter(records, fn(r) { !r.result.accepted }) in
+  let manifest = {
+    component: "azim_code.generation_wrapper_v2.batch",
+    version: "1.0.0",
+    candidate_dir: candidate_dir,
+    run_dir: run_dir,
+    total: list.len(records),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    records: records
+  } in
+  let manifest_text = json.canonicalize(manifest) in
+  let manifest_path = path.join(candidate_dir, "generation_manifest.json") in
+  let _m = fs.write_text(manifest_path, manifest_text) in
+  {
+    ok: true,
+    total: list.len(records),
+    accepted_count: list.len(accepted),
+    rejected_count: list.len(rejected),
+    manifest_path: manifest_path,
+    manifest_sha256: hash.sha256_text(manifest_text),
+    records: records
+  }
+}
+
+export { generation_record, generate_one, generate_batch }

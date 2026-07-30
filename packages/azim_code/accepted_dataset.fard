@@ -4,7 +4,7 @@ import("std/str") as str
 import("std/list") as list
 import("std/json") as json
 import("std/hash") as hash
-import("tokenizer") as tok
+import("../azim_trial/tokenizer") as tok
 
 fn accepted_records_from_manifest(manifest) {
   let accepted = list.filter(manifest.records, fn(r) { r.result.accepted }) in

@@ -1,0 +1,84 @@
+import("std/fs") as fs
+import("std/json") as json
+import("std/hash") as hash
+import("std/list") as list
+import("std/str") as str
+import("std/path") as path
+import("generation_wrapper_v2") as gen
+import("accepted_dataset") as ads
+import("training_corpus_merge") as merge
+import("code_train_adapter") as train
+
+fn run_hybrid_loop_v2(config) {
+  let _ = fs.make_dir(config.out_root) in
+  let _ = fs.make_dir(config.candidate_dir) in
+  let _ = fs.make_dir(config.run_dir) in
+
+  let generation_result = gen.generate_batch(
+    config.tasks,
+    config.langs,
+    config.checkpoint_path,
+    config.candidate_dir,
+    config.run_dir,
+    config.api_url,
+    config.api_key,
+    config.model,
+    config.max_azim_attempts,
+    config.max_llm_attempts,
+    config.azim_tokens,
+    config.azim_k,
+    config.azim_temp
+  ) in
+
+  let accepted_result = ads.build(
+    generation_result.manifest_path,
+    config.accepted_out
+  ) in
+
+  let merge_result = merge.merge(
+    config.base_shard_path,
+    accepted_result.shard_path,
+    config.merged_out
+  ) in
+
+  let train_result = train.train_shard(
+    merge_result.out_shard_path,
+    config.train_checkpoint_dir,
+    config.lr,
+    config.epsilon,
+    config.max_train_records,
+    config.steps_per_record
+  ) in
+
+  let train_result_path = path.join(config.out_root, "loop_train_result.json") in
+  let _tw = fs.write_text(train_result_path, json.canonicalize({ result: train_result })) in
+
+  let report = {
+    component: "azim_code.hybrid_loop_v2",
+    version: "1.0.0",
+    generation: generation_result,
+    accepted: accepted_result,
+    merged: merge_result,
+    train: train_result
+  } in
+  let report_text = json.canonicalize(report) in
+  let report_path = path.join(config.out_root, "loop_report.json") in
+  let _w = fs.write_text(report_path, report_text) in
+
+  {
+    ok: true,
+    report_path: report_path,
+    report_sha256: hash.sha256_text(report_text),
+    accepted_count: generation_result.accepted_count,
+    merged_records: merge_result.merged_records,
+    total_steps: train_result.total_steps,
+    avg_loss_delta: train_result.avg_loss_delta,
+    proposer_stats: {
+      total: generation_result.total,
+      accepted: generation_result.accepted_count,
+      rejected: generation_result.rejected_count
+    }
+  }
+}
+
+export { run_hybrid_loop_v2 }

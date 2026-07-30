@@ -1,0 +1,36 @@
+import("std/fs") as fs
+import("packages/azim_code/hybrid_loop_v2") as loop
+
+loop.run_hybrid_loop_v2({
+  out_root: "out/hybrid_loop_v2_r2",
+  candidate_dir: "out/hybrid_loop_v2_r2/candidates",
+  run_dir: "out/hybrid_loop_v2_r2/runs",
+  accepted_out: "out/hybrid_loop_v2_r2/accepted",
+  merged_out: "out/hybrid_loop_v2_r2/merged",
+  train_checkpoint_dir: "out/full_corpus_training",
+  checkpoint_path: "out/full_corpus_training/code_checkpoint.json",
+  base_shard_path: "out/full_corpus_with_humaneval.jsonl",
+  tasks: [
+    "Write a python function is_palindrome(s) that returns True if s is a palindrome",
+    "Write a python function flatten(lst) that flattens a nested list one level",
+    "Write a python function count_vowels(s) that returns the number of vowels in s",
+    "Write a python function celsius_to_fahrenheit(c) that converts celsius to fahrenheit",
+    "Write a python function find_max(lst) that returns the maximum value in a list"
+  ],
+  langs: ["python"],
+  api_url: "https://api.openai.com/v1/chat/completions",
+  api_key: fs.read_text(".openai_key"),
+  model: "gpt-4o-mini",
+  max_azim_attempts: 1,
+  max_llm_attempts: 3,
+  azim_tokens: 64,
+  azim_k: 4,
+  azim_temp: 1.0,
+  lr: 0.0005,
+  epsilon: 0.0001,
+  max_train_records: -1,
+  steps_per_record: 10,
+  min_accepted: 1,
+  min_records: 1,
+  require_loss_decrease: true
+})

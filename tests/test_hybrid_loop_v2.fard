@@ -1,0 +1,6 @@
+import("std/fs") as fs
+import("../packages/azim_code/hybrid_loop_v2") as loop
+
+test "hybrid_loop_v2 exports run_hybrid_loop_v2" {
+  true
+}
