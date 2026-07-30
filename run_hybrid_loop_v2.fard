@@ -2,20 +2,25 @@ import("std/fs") as fs
 import("packages/azim_code/hybrid_loop_v2") as loop
 
 loop.run_hybrid_loop_v2({
-  out_root: "out/hybrid_loop_v2_r2",
-  candidate_dir: "out/hybrid_loop_v2_r2/candidates",
-  run_dir: "out/hybrid_loop_v2_r2/runs",
-  accepted_out: "out/hybrid_loop_v2_r2/accepted",
-  merged_out: "out/hybrid_loop_v2_r2/merged",
+  out_root: "out/hybrid_loop_v2_r4",
+  candidate_dir: "out/hybrid_loop_v2_r4/candidates",
+  run_dir: "out/hybrid_loop_v2_r4/runs",
+  accepted_out: "out/hybrid_loop_v2_r4/accepted",
+  merged_out: "out/hybrid_loop_v2_r4/merged",
   train_checkpoint_dir: "out/full_corpus_training",
   checkpoint_path: "out/full_corpus_training/code_checkpoint.json",
   base_shard_path: "out/full_corpus_with_humaneval.jsonl",
   tasks: [
-    "Write a python function is_palindrome(s) that returns True if s is a palindrome",
-    "Write a python function flatten(lst) that flattens a nested list one level",
-    "Write a python function count_vowels(s) that returns the number of vowels in s",
-    "Write a python function celsius_to_fahrenheit(c) that converts celsius to fahrenheit",
-    "Write a python function find_max(lst) that returns the maximum value in a list"
+    "Write a python function is_prime(n) that returns True if n is prime",
+    "Write a python function binary_search(lst, target) that returns the index or -1",
+    "Write a python function reverse_string(s) that returns the reversed string",
+    "Write a python function sum_digits(n) that returns the sum of digits of n",
+    "Write a python function gcd(a, b) that returns the greatest common divisor",
+    "Write a python function is_anagram(s1, s2) that returns True if s1 and s2 are anagrams",
+    "Write a python function fibonacci(n) that returns the nth fibonacci number",
+    "Write a python function count_words(s) that returns the number of words in s",
+    "Write a python function remove_duplicates(lst) that returns list with duplicates removed",
+    "Write a python function capitalize_words(s) that capitalizes every word in s"
   ],
   langs: ["python"],
   api_url: "https://api.openai.com/v1/chat/completions",
