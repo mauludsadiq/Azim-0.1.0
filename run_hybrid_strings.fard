@@ -2,11 +2,11 @@ import("std/fs") as fs
 import("packages/azim_code/hybrid_loop_v2") as loop
 
 loop.run_hybrid_loop_v2({
-  out_root: "out/hybrid_strings_r1",
-  candidate_dir: "out/hybrid_strings_r1/candidates",
-  run_dir: "out/hybrid_strings_r1/runs",
-  accepted_out: "out/hybrid_strings_r1/accepted",
-  merged_out: "out/hybrid_strings_r1/merged",
+  out_root: "out/hybrid_strings_r2",
+  candidate_dir: "out/hybrid_strings_r2/candidates",
+  run_dir: "out/hybrid_strings_r2/runs",
+  accepted_out: "out/hybrid_strings_r2/accepted",
+  merged_out: "out/hybrid_strings_r2/merged",
   train_checkpoint_dir: "out/full_corpus_training",
   checkpoint_path: "out/full_corpus_training/code_checkpoint.json",
   base_shard_path: "out/full_corpus_with_hybrid.jsonl",
